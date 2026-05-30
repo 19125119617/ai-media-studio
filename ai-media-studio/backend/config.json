@@ -1,0 +1,170 @@
+{
+  "providers": [
+    {
+      "id": "bailian",
+      "name": "阿里云百炼",
+      "baseUrl": "https://dashscope.aliyuncs.com/api/v1",
+      "apiKey": "sk-936ec865d4fb45ed8867fa628d21e079",
+      "enabled": true
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": "",
+      "enabled": false
+    },
+    {
+      "id": "volcengine",
+      "name": "火山引擎",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "apiKey": "",
+      "enabled": false
+    }
+  ],
+  "models": [
+    {
+      "id": "wan2.7-image",
+      "providerId": "bailian",
+      "type": "image",
+      "subtype": "t2i",
+      "label": "标准画图",
+      "description": "wan2.7 · 1K/2K",
+      "cost": 0.20,
+      "price": 0.50,
+      "perSec": false,
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "id": "wan2.7-image-pro",
+      "providerId": "bailian",
+      "type": "image",
+      "subtype": "t2i",
+      "label": "专业画图（4K）",
+      "description": "wan2.7 · 4K高清",
+      "cost": 0.80,
+      "price": 2.00,
+      "perSec": false,
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "id": "wanx2.0-t2i-turbo",
+      "providerId": "bailian",
+      "type": "image",
+      "subtype": "t2i",
+      "label": "极速画图",
+      "description": "wanx2.0 · 快速生成",
+      "cost": 0.04,
+      "price": 0.20,
+      "perSec": false,
+      "enabled": true,
+      "params": {}
+    },
+    {
+      "id": "wan2.7-t2v-720",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "t2v",
+      "label": "标清视频 720P",
+      "description": "wan2.7 · 有声 · 标清",
+      "cost": 0.60,
+      "price": 1.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "720P", "modelName": "wan2.7-t2v-2026-04-25" }
+    },
+    {
+      "id": "wan2.7-t2v-1080",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "t2v",
+      "label": "高清视频 1080P",
+      "description": "wan2.7 · 有声 · 高清",
+      "cost": 1.00,
+      "price": 2.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "1080P", "modelName": "wan2.7-t2v-2026-04-25" }
+    },
+    {
+      "id": "wan2.7-i2v-720",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "i2v",
+      "label": "标清视频 720P",
+      "description": "wan2.7 · 图生视频 · 标清",
+      "cost": 0.60,
+      "price": 1.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "720P", "modelName": "wan2.7-i2v-2026-04-25" }
+    },
+    {
+      "id": "wan2.7-i2v-1080",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "i2v",
+      "label": "高清视频 1080P",
+      "description": "wan2.7 · 图生视频 · 高清",
+      "cost": 1.00,
+      "price": 2.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "1080P", "modelName": "wan2.7-i2v-2026-04-25" }
+    },
+    {
+      "id": "hh-t2v-720",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "t2v",
+      "label": "欢乐马 · 标清视频",
+      "description": "HappyHorse · 全球排名第一 · 标清",
+      "cost": 0.90,
+      "price": 1.50,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "720P", "modelName": "happyhorse-1.0-t2v" }
+    },
+    {
+      "id": "hh-t2v-1080",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "t2v",
+      "label": "欢乐马 · 高清视频",
+      "description": "HappyHorse · 全球排名第一 · 高清",
+      "cost": 1.80,
+      "price": 3.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "1080P", "modelName": "happyhorse-1.0-t2v" }
+    },
+    {
+      "id": "hh-i2v-720",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "i2v",
+      "label": "欢乐马 · 标清视频",
+      "description": "HappyHorse · 图生视频 · 标清",
+      "cost": 1.20,
+      "price": 2.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "720p", "modelName": "happyhorse-1.0-i2v", "series": "happyhorse" }
+    },
+    {
+      "id": "hh-i2v-1080",
+      "providerId": "bailian",
+      "type": "video",
+      "subtype": "i2v",
+      "label": "欢乐马 · 高清视频",
+      "description": "HappyHorse · 图生视频 · 高清",
+      "cost": 2.40,
+      "price": 4.00,
+      "perSec": true,
+      "enabled": true,
+      "params": { "resolution": "1080p", "modelName": "happyhorse-1.0-i2v", "series": "happyhorse" }
+    }
+  ]
+}
