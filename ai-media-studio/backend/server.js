@@ -7,25 +7,24 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
+const db = require('./db');  // SQLite 数据库
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'ai_media_studio_secret_2026';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const ADMIN_PASSWORD = process.env.DMIN_PASSWORD || 'admin123';
 
-// ─── 配置文件加载 ───────────────────────────────────────────────────────────
+// ─── 配置文件加载 ─────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 let appConfig = { providers: [], models: [] };
-let PRICING = {};  // 从 config.models 派生，{ id: { type, cost, price, label, perSec } }
+let PRICING = {};
 
-// 安全写配置（先写 .tmp 再 rename，防止写入损坏）
 function saveConfig() {
   const tmp = CONFIG_PATH + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(appConfig, null, 2), 'utf8');
   fs.renameSync(tmp, CONFIG_PATH);
 }
 
-// 加载配置
 function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
@@ -37,39 +36,25 @@ function loadConfig() {
   rebuildPricing();
 }
 
-// 从 models 数组重建 PRICING 字典
 function rebuildPricing() {
   PRICING = {};
   for (const m of appConfig.models) {
     PRICING[m.id] = {
-      type: m.type,
-      subtype: m.subtype,
-      providerId: m.providerId,
-      cost: m.cost,
-      price: m.price,
-      label: m.label,
-      description: m.description,
-      perSec: m.perSec,
-      enabled: m.enabled,
-      params: m.params || {}
+      type: m.type, subtype: m.subtype, providerId: m.providerId,
+      cost: m.cost, price: m.price, label: m.label,
+      description: m.description, perSec: m.perSec,
+      enabled: m.enabled, params: m.params || {}
     };
   }
 }
 
-// 获取启用的 provider
 function getEnabledProvider(providerId) {
   return appConfig.providers.find(p => p.id === providerId && p.enabled);
 }
 
-// 获取启用的模型
-function getEnabledModels() {
-  return appConfig.models.filter(m => m.enabled);
-}
-
-// ─── 启动时加载配置 ───────────────────────────────────────────────────────
 loadConfig();
 
-// ─── Express 中间件 ───────────────────────────────────────────────────────
+// ─── Express 中间件 ─────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -80,12 +65,22 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
-// ─── 内存数据库 ─────────────────────────────────────────────────────────────
-const users = [];
-const tasks = [];
-const gallery = [];
-let taskIdCounter = 1;
-let galleryIdCounter = 1;
+// ─── SQLite 封装 ────────────────────────────────────────────────────────────
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+}
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+  });
+}
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) { err ? reject(err) : resolve(this); });
+  });
+}
 
 // ─── 工具函数 ──────────────────────────────────────────────────────────────
 function generateToken(user) {
@@ -103,39 +98,6 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function findUser(id) {
-  return users.find(u => u.id === id);
-}
-
-function calcCost(planKey, durationSec) {
-  const p = PRICING[planKey];
-  if (!p) return 0;
-  if (p.perSec && durationSec) return p.price * durationSec;
-  return p.price;
-}
-
-function deductBalance(user, yuan) {
-  user.balance = parseFloat((user.balance - yuan).toFixed(2));
-  if (user.balance < 0) user.balance = 0;
-}
-
-function saveToGallery(userId, task) {
-  if (!task.result || !task.result.length) return;
-  task.galleryId = (galleryIdCounter++).toString();
-  const item = {
-    id: task.galleryId,
-    userId,
-    type: task.type,
-    planLabel: task.planLabel,
-    prompt: task.prompt,
-    result: task.result,
-    costYuan: task.costYuan,
-    createdAt: task.createdAt,
-    tags: []
-  };
-  gallery.push(item);
-}
-
 function pubUser(u) {
   return { id: u.id, email: u.email, nickname: u.nickname, balance: u.balance };
 }
@@ -145,18 +107,36 @@ function pubTask(t) {
     id: t.id, type: t.type, status: t.status, prompt: t.prompt,
     planLabel: t.planLabel, aspectRatio: t.aspectRatio, duration: t.duration,
     costYuan: t.costYuan,
-    result: t.result, error: t.error, galleryId: t.galleryId,
+    result: t.result ? JSON.parse(t.result) : null,
+    error: t.error, galleryId: t.galleryId,
     createdAt: t.createdAt
   };
 }
 
-// ─── 百炼 API 轮询（复用）──────────────────────────────────────────────────
+function pubGallery(g) {
+  return {
+    id: g.id, userId: g.userId, type: g.type, planLabel: g.planLabel,
+    prompt: g.prompt,
+    result: g.result ? JSON.parse(g.result) : [],
+    costYuan: g.costYuan, createdAt: g.createdAt,
+    tags: g.tags ? JSON.parse(g.tags) : []
+  };
+}
+
+function calcCost(planKey, durationSec) {
+  const p = PRICING[planKey];
+  if (!p) return 0;
+  if (p.perSec && durationSec) return p.price * durationSec;
+  return p.price;
+}
+
+// ─── 百炼 API 轮询 ────────────────────────────────────────────────────────
 const BAILIAN_API_KEY = (() => {
   const p = appConfig.providers.find(p => p.id === 'bailian');
   return p ? p.apiKey : (process.env.BAILIAN_API_KEY || '');
 })();
 
-async function pollBailianTask(taskRecord, url, maxWaitSeconds) {
+async function pollBailianTask(taskId, url, maxWaitSeconds) {
   const interval = 4000;
   const maxAttempts = Math.floor((maxWaitSeconds * 1000) / interval);
   for (let i = 0; i < maxAttempts; i++) {
@@ -168,47 +148,45 @@ async function pollBailianTask(taskRecord, url, maxWaitSeconds) {
       const output = resp.data.output;
       const status = output?.task_status;
       if (status === 'SUCCEEDED') {
-        taskRecord.status = 'succeeded';
-        if (output.results) {
-          taskRecord.result = output.results.map(r => r.url || r.video_url).filter(Boolean);
-        } else if (output.video_url) {
-          taskRecord.result = [output.video_url];
-        } else if (output.result_url) {
-          taskRecord.result = [output.result_url];
-        }
-        return;
+        await dbRun(`UPDATE tasks SET status='succeeded', result=? WHERE id=?`, [
+          JSON.stringify(output.results ? output.results.map(r => r.url || r.video_url).filter(Boolean) : (output.video_url ? [output.video_url] : (output.result_url ? [output.result_url] : []))),
+          taskId
+        ]);
+        return 'succeeded';
       } else if (status === 'FAILED') {
-        taskRecord.status = 'failed';
-        taskRecord.error = output.message || '生成失败';
-        return;
+        await dbRun(`UPDATE tasks SET status='failed', error=? WHERE id=?`, [output.message || '生成失败', taskId]);
+        return 'failed';
       }
-    } catch {}
+    } catch (e) {
+      // 忽略轮询中的网络错误，继续轮询
+    }
   }
-  taskRecord.status = 'failed';
-  taskRecord.error = '生成超时，请重试';
+  await dbRun(`UPDATE tasks SET status='failed', error='生成超时，请重试' WHERE id=?`, [taskId]);
+  return 'failed';
 }
 
 // ─── 用户注册/登录 ─────────────────────────────────────────────────────────
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, nickname } = req.body;
   if (!email || !password) return res.status(400).json({ error: '邮箱和密码不能为空' });
-  if (users.find(u => u.email === email)) return res.status(400).json({ error: '该邮箱已注册' });
+  const existing = await dbGet(`SELECT id FROM users WHERE email=?`, [email]);
+  if (existing) return res.status(400).json({ error: '该邮箱已注册' });
   const hash = await bcrypt.hash(password, 10);
-  const user = {
-    id: Date.now().toString(),
-    email,
-    password: hash,
-    nickname: nickname || email.split('@')[0],
-    createdAt: new Date().toISOString()
-  };
-  users.push(user);
+  const id = Date.now().toString();
+  const createdAt = new Date().toISOString();
+  const nick = nickname || email.split('@')[0];
+  await dbRun(
+    `INSERT INTO users (id, email, password, nickname, balance, createdAt) VALUES (?,?,?,?,?,?)`,
+    [id, email, hash, nick, 0, createdAt]
+  );
+  const user = { id, email, nickname: nick, balance: 0 };
   const token = generateToken(user);
-  res.json({ token, user: pubUser(user) });
+  res.json({ token, user });
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  const user = users.find(u => u.email === email);
+  const user = await dbGet(`SELECT * FROM users WHERE email=?`, [email]);
   if (!user) return res.status(400).json({ error: '用户不存在' });
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) return res.status(400).json({ error: '密码错误' });
@@ -216,32 +194,38 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token, user: pubUser(user) });
 });
 
-app.get('/api/auth/me', authMiddleware, (req, res) => {
-  const user = findUser(req.user.id);
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
   if (!user) return res.status(404).json({ error: '用户不存在' });
   res.json(pubUser(user));
 });
 
-// ─── 模型选项（公开 - 前台用）──────────────────────────────────────────────
+// ─── 模型选项 ────────────────────────────────────────────────────────────────
 app.get('/api/models', (req, res) => {
-  // 返回启用的模型，给前台动态渲染用
   res.json(getEnabledModels());
 });
 
-// ─── 余额充值 ──────────────────────────────────────────────────────────────
-app.post('/api/balance/recharge', authMiddleware, (req, res) => {
+// ─── 余额充值 ────────────────────────────────────────────────────────────────
+app.post('/api/balance/recharge', authMiddleware, async (req, res) => {
   const { amount } = req.body;
-  const user = findUser(req.user.id);
-  if (!user) return res.status(404).json({ error: '用户不存在' });
   const n = parseFloat(amount);
   if (isNaN(n) || n <= 0) return res.status(400).json({ error: '充值金额无效' });
-  user.balance = parseFloat((user.balance + n).toFixed(2));
-  res.json({ balance: user.balance, message: `充值成功${n}元，当前余额${user.balance}元` });
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  const balanceBefore = user.balance;
+  const balanceAfter = parseFloat((user.balance + n).toFixed(2));
+  await dbRun(`UPDATE users SET balance=? WHERE id=?`, [balanceAfter, user.id]);
+  // 记录充值记录
+  await dbRun(
+    `INSERT INTO recharge_records (userId, amount, balanceBefore, balanceAfter, createdAt) VALUES (?,?,?,?,?)`,
+    [user.id, n, balanceBefore, balanceAfter, new Date().toISOString()]
+  );
+  res.json({ balance: balanceAfter, message: `充值成功${n}元，当前余额${balanceAfter}元` });
 });
 
-// ─── 文生图 ───────────────────────────────────────────────────────────────
+// ─── 文生图 ────────────────────────────────────────────────────────────────
 app.post('/api/generate/text-to-image', authMiddleware, async (req, res) => {
-  const user = findUser(req.user.id);
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
   if (!user) return res.status(404).json({ error: '用户不存在' });
 
   const { prompt, planKey = 'wan2.7-image', aspectRatio = '1:1', n = 1 } = req.body;
@@ -260,21 +244,19 @@ app.post('/api/generate/text-to-image', authMiddleware, async (req, res) => {
     '3:4': '896*1152', '4:3': '1152*896', '2:3': '832*1216', '3:2': '1216*832'
   };
   const sizeStr = sizeMap[aspectRatio] || '1024*1024';
+  const taskId = Date.now().toString();
+  const createdAt = new Date().toISOString();
 
-  const task = {
-    id: (taskIdCounter++).toString(),
-    userId: user.id,
-    type: 'text-to-image',
-    planKey, planLabel: plan.label,
-    status: 'pending', prompt, aspectRatio, sizeStr, n: parseInt(n),
-    costYuan: totalYuan,
-    createdAt: new Date().toISOString(), result: null, error: null, galleryId: null
-  };
-  tasks.push(task);
+  await dbRun(
+    `INSERT INTO tasks (id, userId, type, planKey, planLabel, status, prompt, aspectRatio, duration, costYuan, createdAt, result, error, galleryId)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL)`,
+    [taskId, user.id, 'text-to-image', planKey, plan.label, 'pending', prompt, aspectRatio, n, totalYuan, createdAt]
+  );
 
+  // 异步调用百炼 API
   (async () => {
     try {
-      task.status = 'running';
+      await dbRun(`UPDATE tasks SET status='running' WHERE id=?`, [taskId]);
       const provider = getEnabledProvider(plan.providerId || 'bailian');
       const apiKey = provider ? provider.apiKey : BAILIAN_API_KEY;
       const resp = await axios.post(
@@ -282,26 +264,34 @@ app.post('/api/generate/text-to-image', authMiddleware, async (req, res) => {
         { model: planKey, input: { prompt }, parameters: { size: sizeStr, n: parseInt(n), style: '<auto>' } },
         { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' } }
       );
-      const taskId = resp.data.output?.task_id;
-      if (!taskId) throw new Error('未获取到task_id');
-      task.bailianTaskId = taskId;
-      await pollBailianTask(task, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + taskId, 60);
-      if (task.status === 'succeeded') {
-        deductBalance(user, task.costYuan);
-        saveToGallery(user.id, task);
+      const bailianTaskId = resp.data.output?.task_id;
+      if (!bailianTaskId) throw new Error('未获取到task_id');
+      await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
+      const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, 60);
+      if (finalStatus === 'succeeded') {
+        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [totalYuan, user.id]);
+        // 保存到作品库
+        const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
+        if (task.result) {
+          const galleryId = Date.now().toString();
+          await dbRun(
+            `INSERT INTO gallery (id, userId, type, planLabel, prompt, result, costYuan, createdAt, tags) VALUES (?,?,?,?,?,?,?,?,?)`,
+            [galleryId, user.id, task.type, task.planLabel, task.prompt, task.result, task.costYuan, task.createdAt, '[]']
+          );
+          await dbRun(`UPDATE tasks SET galleryId=? WHERE id=?`, [galleryId, taskId]);
+        }
       }
     } catch (e) {
-      task.status = 'failed';
-      task.error = e.response?.data?.message || e.message;
+      await dbRun(`UPDATE tasks SET status='failed', error=? WHERE id=?`, [e.response?.data?.message || e.message, taskId]);
     }
   })();
 
-  res.json({ taskId: task.id, status: 'pending', costYuan: totalYuan });
+  res.json({ taskId, status: 'pending', costYuan: totalYuan });
 });
 
-// ─── 文生视频 ─────────────────────────────────────────────────────────────
+// ─── 文生视频 ────────────────────────────────────────────────────────────────
 app.post('/api/generate/text-to-video', authMiddleware, async (req, res) => {
-  const user = findUser(req.user.id);
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
   if (!user) return res.status(404).json({ error: '用户不存在' });
 
   const { prompt, planKey = 'wan2.7-t2v-720', duration = 5, ratio = '16:9' } = req.body;
@@ -316,53 +306,53 @@ app.post('/api/generate/text-to-video', authMiddleware, async (req, res) => {
     return res.status(402).json({ error: `余额不足，该操作需要 ${costYuan} 元，当前余额 ${user.balance.toFixed(2)} 元` });
   }
 
-  const task = {
-    id: (taskIdCounter++).toString(),
-    userId: user.id,
-    type: 'text-to-video',
-    planKey, planLabel: plan.label, duration: dur,
-    status: 'pending', prompt,
-    costYuan,
-    createdAt: new Date().toISOString(), result: null, error: null, galleryId: null
-  };
-  tasks.push(task);
+  const taskId = Date.now().toString();
+  const createdAt = new Date().toISOString();
+  await dbRun(
+    `INSERT INTO tasks (id, userId, type, planKey, planLabel, status, prompt, aspectRatio, duration, costYuan, createdAt, result, error, galleryId)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL)`,
+    [taskId, user.id, 'text-to-video', planKey, plan.label, 'pending', prompt, ratio, dur, costYuan, createdAt]
+  );
 
   (async () => {
     try {
-      task.status = 'running';
+      await dbRun(`UPDATE tasks SET status='running' WHERE id=?`, [taskId]);
       const resolution = plan.params?.resolution || (planKey.includes('1080') ? '1080P' : '720P');
       const provider = getEnabledProvider(plan.providerId || 'bailian');
       const apiKey = provider ? provider.apiKey : BAILIAN_API_KEY;
       const modelName = plan.params?.modelName || 'wan2.7-t2v-2026-04-25';
       const resp = await axios.post(
         'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-        {
-          model: modelName,
-          input: { prompt: prompt || undefined },
-          parameters: { duration: dur, resolution, ratio }
-        },
+        { model: modelName, input: { prompt: prompt || undefined }, parameters: { duration: dur, resolution, ratio } },
         { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' } }
       );
-      const taskId = resp.data.output?.task_id;
-      if (!taskId) throw new Error('未获取到task_id');
-      task.bailianTaskId = taskId;
-      await pollBailianTask(task, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + taskId, 180);
-      if (task.status === 'succeeded') {
-        deductBalance(user, task.costYuan);
-        saveToGallery(user.id, task);
+      const bailianTaskId = resp.data.output?.task_id;
+      if (!bailianTaskId) throw new Error('未获取到task_id');
+      await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
+      const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, 180);
+      if (finalStatus === 'succeeded') {
+        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [costYuan, user.id]);
+        const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
+        if (task.result) {
+          const galleryId = Date.now().toString();
+          await dbRun(
+            `INSERT INTO gallery (id, userId, type, planLabel, prompt, result, costYuan, createdAt, tags) VALUES (?,?,?,?,?,?,?,?,?)`,
+            [galleryId, user.id, task.type, task.planLabel, task.prompt, task.result, task.costYuan, task.createdAt, '[]']
+          );
+          await dbRun(`UPDATE tasks SET galleryId=? WHERE id=?`, [galleryId, taskId]);
+        }
       }
     } catch (e) {
-      task.status = 'failed';
-      task.error = e.response?.data?.message || e.message;
+      await dbRun(`UPDATE tasks SET status='failed', error=? WHERE id=?`, [e.response?.data?.message || e.message, taskId]);
     }
   })();
 
-  res.json({ taskId: task.id, status: 'pending', costYuan });
+  res.json({ taskId, status: 'pending', costYuan });
 });
 
-// ─── 图生视频 ─────────────────────────────────────────────────────────────
+// ─── 图生视频 ────────────────────────────────────────────────────────────────
 app.post('/api/generate/image-to-video', authMiddleware, upload.single('image'), async (req, res) => {
-  const user = findUser(req.user.id);
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
   if (!user) return res.status(404).json({ error: '用户不存在' });
   if (!req.file) return res.status(400).json({ error: '请上传图片' });
 
@@ -377,207 +367,191 @@ app.post('/api/generate/image-to-video', authMiddleware, upload.single('image'),
     return res.status(402).json({ error: `余额不足，该操作需要 ${costYuan} 元，当前余额 ${user.balance.toFixed(2)} 元` });
   }
 
-  const task = {
-    id: (taskIdCounter++).toString(),
-    userId: user.id,
-    type: 'image-to-video',
-    planKey, planLabel: plan.label, duration: dur,
-    status: 'pending', prompt,
-    costYuan,
-    createdAt: new Date().toISOString(), result: null, error: null, galleryId: null,
-    tmpFile: req.file.path
-  };
-  tasks.push(task);
+  const taskId = Date.now().toString();
+  const createdAt = new Date().toISOString();
+  await dbRun(
+    `INSERT INTO tasks (id, userId, type, planKey, planLabel, status, prompt, aspectRatio, duration, costYuan, createdAt, result, error, galleryId)
+     VALUES (?,?,?,?,?,?,?,NULL,?,?,?,NULL,NULL,NULL)`,
+    [taskId, user.id, 'image-to-video', planKey, plan.label, 'pending', prompt, dur, costYuan, createdAt]
+  );
 
   (async () => {
     try {
-      task.status = 'running';
+      await dbRun(`UPDATE tasks SET status='running' WHERE id=?`, [taskId]);
       const imgData = fs.readFileSync(req.file.path);
       const imgBase64 = imgData.toString('base64');
       const provider = getEnabledProvider(plan.providerId || 'bailian');
       const apiKey = provider ? provider.apiKey : BAILIAN_API_KEY;
       const series = plan.params?.series;
+      let modelName, resolution, timeout;
 
       if (series === 'happyhorse') {
-        // HappyHorse 专用接口：直接返回结果，无需轮询
-        const resolution = plan.params?.resolution || (planKey.includes('1080') ? '1080p' : '720p');
-        const resp = await axios.post(
-          `${provider?.baseUrl || 'https://dashscope.aliyuncs.com/api/v1'}/services/aigc/video-generation/video-synthesis`,
-          {
-            model: plan.params?.modelName || 'happyhorse-1.0-i2v',
-            input: {
-              prompt: prompt || undefined,
-              media: [{ type: 'first_frame', url: `data:image/jpeg;base64,${imgBase64}` }]
-            },
-            parameters: { duration: dur, resolution }
-          },
-          { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' } }
-        );
-        fs.unlinkSync(req.file.path);
-        const taskId = resp.data.output?.task_id;
-        if (!taskId) throw new Error('未获取到 task_id');
-        task.bailianTaskId = taskId;
-        await pollBailianTask(task, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + taskId, 300);
-        if (task.status === 'succeeded') {
-          deductBalance(user, task.costYuan);
-          saveToGallery(user.id, task);
-        }
+        modelName = plan.params?.modelName || 'happyhorse-1.0-i2v';
+        resolution = plan.params?.resolution || (planKey.includes('1080') ? '1080p' : '720p');
+        timeout = 300;
       } else {
-        // wan2.7 原生接口
-        const resolution = plan.params?.resolution || (planKey.includes('1080') ? '1080P' : '720P');
-        const modelName = plan.params?.modelName || 'wan2.7-i2v-2026-04-25';
-        const resp = await axios.post(
-          'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-          {
-            model: modelName,
-            input: {
-              prompt: prompt || undefined,
-              media: [{ type: 'first_frame', url: `data:image/jpeg;base64,${imgBase64}` }]
-            },
-            parameters: { duration: dur, resolution }
+        modelName = plan.params?.modelName || 'wan2.7-i2v-2026-04-25';
+        resolution = plan.params?.resolution || (planKey.includes('1080') ? '1080P' : '720P');
+        timeout = 180;
+      }
+
+      const resp = await axios.post(
+        'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
+        {
+          model: modelName,
+          input: {
+            prompt: prompt || undefined,
+            media: [{ type: 'first_frame', url: `data:image/jpeg;base64,${imgBase64}` }]
           },
-          { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' } }
-        );
-        fs.unlinkSync(req.file.path);
-        const taskId = resp.data.output?.task_id;
-        if (!taskId) throw new Error('未获取到task_id');
-        task.bailianTaskId = taskId;
-        await pollBailianTask(task, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + taskId, 180);
-        if (task.status === 'succeeded') {
-          deductBalance(user, task.costYuan);
-          saveToGallery(user.id, task);
+          parameters: { duration: dur, resolution }
+        },
+        { headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-DashScope-Async': 'enable' } }
+      );
+      fs.unlinkSync(req.file.path);
+      const bailianTaskId = resp.data.output?.task_id;
+      if (!bailianTaskId) throw new Error('未获取到task_id');
+      await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
+      const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, timeout);
+      if (finalStatus === 'succeeded') {
+        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [costYuan, user.id]);
+        const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
+        if (task.result) {
+          const galleryId = Date.now().toString();
+          await dbRun(
+            `INSERT INTO gallery (id, userId, type, planLabel, prompt, result, costYuan, createdAt, tags) VALUES (?,?,?,?,?,?,?,?,?)`,
+            [galleryId, user.id, task.type, task.planLabel, task.prompt, task.result, task.costYuan, task.createdAt, '[]']
+          );
+          await dbRun(`UPDATE tasks SET galleryId=? WHERE id=?`, [galleryId, taskId]);
         }
       }
     } catch (e) {
-      task.status = 'failed';
-      task.error = e.response?.data?.message || e.message;
+      await dbRun(`UPDATE tasks SET status='failed', error=? WHERE id=?`, [e.response?.data?.message || e.message, taskId]);
       try { fs.unlinkSync(req.file.path); } catch {}
     }
   })();
 
-  res.json({ taskId: task.id, status: 'pending', costYuan });
+  res.json({ taskId, status: 'pending', costYuan });
 });
 
-// ─── 任务状态 ─────────────────────────────────────────────────────────────
-app.get('/api/task/:taskId', authMiddleware, (req, res) => {
-  const task = tasks.find(t => t.id === req.params.taskId && t.userId === req.user.id);
+// ─── 任务状态 ────────────────────────────────────────────────────────────────
+app.get('/api/task/:taskId', authMiddleware, async (req, res) => {
+  const task = await dbGet(`SELECT * FROM tasks WHERE id=? AND userId=?`, [req.params.taskId, req.user.id]);
   if (!task) return res.status(404).json({ error: '任务不存在' });
   res.json(pubTask(task));
 });
 
-// ─── 历史记录 ─────────────────────────────────────────────────────────────
-app.get('/api/tasks', authMiddleware, (req, res) => {
-  const userTasks = tasks
-    .filter(t => t.userId === req.user.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 100)
-    .map(pubTask);
-  res.json(userTasks);
+// ─── 历史记录 ────────────────────────────────────────────────────────────────
+app.get('/api/tasks', authMiddleware, async (req, res) => {
+  const rows = await dbAll(
+    `SELECT * FROM tasks WHERE userId=? ORDER BY createdAt DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(rows.map(pubTask));
 });
 
-// ─── 作品库 ───────────────────────────────────────────────────────────────
-app.get('/api/gallery', authMiddleware, (req, res) => {
-  const items = gallery
-    .filter(g => g.userId === req.user.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(items);
+// ─── 作品库 ────────────────────────────────────────────────────────────────
+app.get('/api/gallery', authMiddleware, async (req, res) => {
+  const rows = await dbAll(
+    `SELECT * FROM gallery WHERE userId=? ORDER BY createdAt DESC`,
+    [req.user.id]
+  );
+  res.json(rows.map(pubGallery));
 });
 
-app.put('/api/gallery/:id', authMiddleware, (req, res) => {
-  const item = gallery.find(g => g.id === req.params.id && g.userId === req.user.id);
-  if (!item) return res.status(404).json({ error: '作品不存在' });
+app.put('/api/gallery/:id', authMiddleware, async (req, res) => {
   const { title, tags } = req.body;
-  if (title !== undefined) item.title = title;
-  if (tags !== undefined) item.tags = tags;
-  res.json(item);
+  const item = await dbGet(`SELECT * FROM gallery WHERE id=? AND userId=?`, [req.params.id, req.user.id]);
+  if (!item) return res.status(404).json({ error: '作品不存在' });
+  if (title !== undefined) await dbRun(`UPDATE gallery SET title=? WHERE id=? AND userId=?`, [title, req.params.id, req.user.id]);
+  if (tags !== undefined) await dbRun(`UPDATE gallery SET tags=? WHERE id=? AND userId=?`, [JSON.stringify(tags), req.params.id, req.user.id]);
+  const updated = await dbGet(`SELECT * FROM gallery WHERE id=?`, [req.params.id]);
+  res.json(pubGallery(updated));
 });
 
-app.delete('/api/gallery/:id', authMiddleware, (req, res) => {
-  const idx = gallery.findIndex(g => g.id === req.params.id && g.userId === req.user.id);
-  if (idx === -1) return res.status(404).json({ error: '作品不存在' });
-  gallery.splice(idx, 1);
+app.delete('/api/gallery/:id', authMiddleware, async (req, res) => {
+  const result = await dbRun(`DELETE FROM gallery WHERE id=? AND userId=?`, [req.params.id, req.user.id]);
+  if (result.changes === 0) return res.status(404).json({ error: '作品不存在' });
   res.json({ ok: true });
 });
 
-// ─── 管理后台认证 ─────────────────────────────────────────────────────────
+// ─── 管理后台认证 ────────────────────────────────────────────────────────────
 function adminAuth(req, res, next) {
   const pwd = req.headers['x-admin-password'];
   if (pwd !== ADMIN_PASSWORD) return res.status(403).json({ error: '管理密码错误' });
   next();
 }
 
-// ─── 管理后台 API：统计/用户/任务/作品库 ─────────────────────────────────
-app.get('/api/admin/stats', adminAuth, (req, res) => {
-  const totalUsers = users.length;
-  const totalTasks = tasks.length;
-  const totalGallery = gallery.length;
-  const totalRevenue = tasks.filter(t => t.status === 'succeeded').reduce((s, t) => s + (t.costYuan || 0), 0);
+// ─── 管理后台 API ───────────────────────────────────────────────────────────
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  const totalUsers = (await dbGet(`SELECT COUNT(*) as c FROM users`)).c;
+  const totalTasks = (await dbGet(`SELECT COUNT(*) as c FROM tasks`)).c;
+  const totalGallery = (await dbGet(`SELECT COUNT(*) as c FROM gallery`)).c;
+  const totalRevenue = (await dbGet(`SELECT SUM(costYuan) as s FROM tasks WHERE status='succeeded'`)).s || 0;
   const today = new Date().toISOString().slice(0, 10);
-  const todayTasks = tasks.filter(t => t.createdAt && t.createdAt.startsWith(today)).length;
-  const todayRevenue = tasks.filter(t => t.status === 'succeeded' && t.createdAt && t.createdAt.startsWith(today)).reduce((s, t) => s + (t.costYuan || 0), 0);
-  res.json({ totalUsers, totalTasks, totalGallery, totalRevenue: parseFloat(totalRevenue.toFixed(2)), todayTasks, todayRevenue: parseFloat(todayRevenue.toFixed(2)) });
+  const todayTasks = (await dbGet(`SELECT COUNT(*) as c FROM tasks WHERE createdAt LIKE ?`, [`${today}%`])).c;
+  const todayRevenue = (await dbGet(`SELECT SUM(costYuan) as s FROM tasks WHERE status='succeeded' AND createdAt LIKE ?`, [`${today}%`])).s || 0;
+  res.json({
+    totalUsers, totalTasks, totalGallery,
+    totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+    todayTasks, todayRevenue: parseFloat(todayRevenue.toFixed(2))
+  });
 });
 
-app.get('/api/admin/users', adminAuth, (req, res) => {
-  res.json(users.map(u => ({
-    id: u.id, email: u.email, nickname: u.nickname,
-    balance: u.balance,
-    createdAt: u.createdAt,
-    taskCount: tasks.filter(t => t.userId === u.id).length
-  })));
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  const users = await dbAll(`SELECT id, email, nickname, balance, createdAt FROM users ORDER BY createdAt DESC`);
+  // 补充任务数
+  const taskCounts = await dbAll(`SELECT userId, COUNT(*) as c FROM tasks GROUP BY userId`);
+  const countMap = {};
+  taskCounts.forEach(t => countMap[t.userId] = t.c);
+  res.json(users.map(u => ({ ...pubUser(u), taskCount: countMap[u.id] || 0 })));
 });
 
-app.get('/api/admin/tasks', adminAuth, (req, res) => {
-  const all = tasks
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .map(t => {
-      const u = users.find(x => x.id === t.userId);
-      return { ...pubTask(t), userEmail: u ? u.email : t.userId };
-    });
-  res.json(all);
+app.get('/api/admin/tasks', adminAuth, async (req, res) => {
+  const tasks = await dbAll(`SELECT * FROM tasks ORDER BY createdAt DESC LIMIT 200`);
+  const result = [];
+  for (const t of tasks) {
+    const u = await dbGet(`SELECT email FROM users WHERE id=?`, [t.userId]).catch(() => null);
+    result.push({ ...pubTask(t), userEmail: u ? u.email : t.userId });
+  }
+  res.json(result);
 });
 
-app.get('/api/admin/gallery', adminAuth, (req, res) => {
-  const all = gallery
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .map(g => {
-      const u = users.find(x => x.id === g.userId);
-      return { ...g, userEmail: u ? u.email : g.userId };
-    });
-  res.json(all);
+app.get('/api/admin/gallery', adminAuth, async (req, res) => {
+  const items = await dbAll(`SELECT * FROM gallery ORDER BY createdAt DESC LIMIT 200`);
+  const result = [];
+  for (const g of items) {
+    const u = await dbGet(`SELECT email FROM users WHERE id=?`, [g.userId]).catch(() => null);
+    result.push({ ...pubGallery(g), userEmail: u ? u.email : g.userId });
+  }
+  res.json(result);
 });
 
-app.delete('/api/admin/gallery/:id', adminAuth, (req, res) => {
-  const idx = gallery.findIndex(g => g.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: '作品不存在' });
-  gallery.splice(idx, 1);
+app.delete('/api/admin/gallery/:id', adminAuth, async (req, res) => {
+  const result = await dbRun(`DELETE FROM gallery WHERE id=?`, [req.params.id]);
+  if (result.changes === 0) return res.status(404).json({ error: '作品不存在' });
   res.json({ ok: true });
 });
 
-app.delete('/api/admin/task/:id', adminAuth, (req, res) => {
-  const idx = tasks.findIndex(t => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: '任务不存在' });
-  tasks.splice(idx, 1);
+app.delete('/api/admin/task/:id', adminAuth, async (req, res) => {
+  const result = await dbRun(`DELETE FROM tasks WHERE id=?`, [req.params.id]);
+  if (result.changes === 0) return res.status(404).json({ error: '任务不存在' });
   res.json({ ok: true });
 });
 
-// ─── 管理后台 API：统计分析 ───────────────────────────────────────────────
-app.get('/api/admin/analytics', adminAuth, (req, res) => {
-  const succeeded = tasks.filter(t => t.status === 'succeeded');
-
-  // 1. 各模型使用占比（按 planLabel 分组）
+// ─── 管理后台：统计分析 ─────────────────────────────────────────────────────
+app.get('/api/admin/analytics', adminAuth, async (req, res) => {
+  const succeeded = await dbAll(`SELECT * FROM tasks WHERE status='succeeded'`);
   const modelCountMap = {};
   const modelRevenueMap = {};
   for (const t of succeeded) {
     const key = t.planLabel || '未知';
     modelCountMap[key] = (modelCountMap[key] || 0) + 1;
-    modelRevenueMap[key] = parseFloat(((modelRevenueMap[key] || 0) + (t.costYuan || 0)).toFixed(2));
+    modelRevenueMap[key] = (modelRevenueMap[key] || 0) + (t.costYuan || 0);
   }
   const modelStats = Object.entries(modelCountMap)
-    .map(([name, count]) => ({ name, count, revenue: modelRevenueMap[name] || 0 }))
+    .map(([name, count]) => ({ name, count, revenue: parseFloat((modelRevenueMap[name] || 0).toFixed(2)) }))
     .sort((a, b) => b.count - a.count);
 
-  // 2. 最近 12 个月：每月任务量 + 收入（所有任务，含失败的仅计数）
   const now = new Date();
   const months = [];
   for (let i = 11; i >= 0; i--) {
@@ -586,32 +560,22 @@ app.get('/api/admin/analytics', adminAuth, (req, res) => {
   }
   const monthTaskMap = {};
   const monthRevenueMap = {};
-  for (const m of months) {
-    monthTaskMap[m] = 0;
-    monthRevenueMap[m] = 0;
-  }
-  for (const t of tasks) {
+  for (const m of months) { monthTaskMap[m] = 0; monthRevenueMap[m] = 0; }
+  const allTasks = await dbAll(`SELECT * FROM tasks`);
+  for (const t of allTasks) {
     if (!t.createdAt) continue;
     const ym = t.createdAt.slice(0, 7);
-    if (monthTaskMap[ym] !== undefined) {
-      monthTaskMap[ym]++;
-    }
+    if (monthTaskMap[ym] !== undefined) monthTaskMap[ym]++;
     if (t.status === 'succeeded' && monthRevenueMap[ym] !== undefined) {
       monthRevenueMap[ym] = parseFloat((monthRevenueMap[ym] + (t.costYuan || 0)).toFixed(2));
     }
   }
-  const monthStats = months.map(m => ({
-    month: m,
-    tasks: monthTaskMap[m],
-    revenue: monthRevenueMap[m]
-  }));
+  const monthStats = months.map(m => ({ month: m, tasks: monthTaskMap[m], revenue: monthRevenueMap[m] }));
 
   res.json({ modelStats, monthStats });
 });
 
-// ─── 管理后台 API：配置管理 ───────────────────────────────────────────────
-
-// 获取完整配置（不含 API Key 明文）
+// ─── 管理后台：配置管理 ───────────────────────────────────────────────────
 app.get('/api/admin/config', adminAuth, (req, res) => {
   const safeProviders = appConfig.providers.map(p => ({
     ...p,
@@ -620,13 +584,11 @@ app.get('/api/admin/config', adminAuth, (req, res) => {
   res.json({ providers: safeProviders, models: appConfig.models });
 });
 
-// 新增/更新服务商
 app.post('/api/admin/providers', adminAuth, (req, res) => {
   const { id, name, baseUrl, apiKey, enabled } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'id 和名称不能为空' });
   const idx = appConfig.providers.findIndex(p => p.id === id);
   if (idx >= 0) {
-    // 更新（apiKey 传空表示不修改）
     if (apiKey) appConfig.providers[idx].apiKey = apiKey;
     if (name) appConfig.providers[idx].name = name;
     if (baseUrl) appConfig.providers[idx].baseUrl = baseUrl;
@@ -648,7 +610,6 @@ app.delete('/api/admin/providers/:id', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// 新增模型
 app.post('/api/admin/models', adminAuth, (req, res) => {
   const { id, providerId, type, subtype, label, description, cost, price, perSec, enabled, params } = req.body;
   if (!id || !type || !subtype) return res.status(400).json({ error: 'id、type、subtype 不能为空' });
@@ -664,7 +625,6 @@ app.post('/api/admin/models', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// 更新模型
 app.put('/api/admin/models/:id', adminAuth, (req, res) => {
   const model = appConfig.models.find(m => m.id === req.params.id);
   if (!model) return res.status(404).json({ error: '模型不存在' });
@@ -684,7 +644,6 @@ app.put('/api/admin/models/:id', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// 删除模型
 app.delete('/api/admin/models/:id', adminAuth, (req, res) => {
   const idx = appConfig.models.findIndex(m => m.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: '模型不存在' });
@@ -694,15 +653,13 @@ app.delete('/api/admin/models/:id', adminAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── 健康检查 ─────────────────────────────────────────────────────────────
+// ─── 健康检查 ────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({
-  status: 'ok',
-  time: new Date().toISOString(),
-  models: getEnabledModels().length,
-  providers: appConfig.providers.length
+  status: 'ok', time: new Date().toISOString(),
+  models: getEnabledModels().length, providers: appConfig.providers.length
 }));
 
-// ─── 前端路由兜底 ─────────────────────────────────────────────────────────
+// ─── 前端路由兜底 ────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
 });
