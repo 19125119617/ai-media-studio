@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+*.log
+
+# Environment
+.env
+*.local
+
+# Build output
+dist/
+build/
+out/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/tmp/*
+!uploads/tmp/.gitkeep
