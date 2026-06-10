@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -12,7 +13,7 @@ const db = require('./db');  // SQLite 数据库
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'ai_media_studio_secret_2026';
-const ADMIN_PASSWORD = process.env.DMIN_PASSWORD || 'admin123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // ─── 配置文件加载 ─────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(__dirname, 'config.json');
@@ -52,11 +53,21 @@ function getEnabledProvider(providerId) {
   return appConfig.providers.find(p => p.id === providerId && p.enabled);
 }
 
+function getEnabledModels() {
+  if (!appConfig || !appConfig.models) return [];
+  return appConfig.models.filter(m => m.enabled);
+}
+
 loadConfig();
 
 // ─── Express 中间件 ─────────────────────────────────────────────────────────
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Password']
+}));
+app.use(express.json({ limit: '5mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use(express.static(path.join(__dirname, '../frontend/public')));
 
@@ -172,7 +183,7 @@ app.post('/api/auth/register', async (req, res) => {
   const existing = await dbGet(`SELECT id FROM users WHERE email=?`, [email]);
   if (existing) return res.status(400).json({ error: '该邮箱已注册' });
   const hash = await bcrypt.hash(password, 10);
-  const id = Date.now().toString();
+  const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const nick = nickname || email.split('@')[0];
   await dbRun(
@@ -206,19 +217,21 @@ app.get('/api/models', (req, res) => {
 });
 
 // ─── 余额充值 ────────────────────────────────────────────────────────────────
-app.post('/api/balance/recharge', authMiddleware, async (req, res) => {
-  const { amount } = req.body;
+// 充值接口 - 需要管理员认证
+app.post('/api/balance/recharge', authMiddleware, adminAuth, async (req, res) => {
+  const { amount, userId: targetUserId } = req.body;
   const n = parseFloat(amount);
   if (isNaN(n) || n <= 0) return res.status(400).json({ error: '充值金额无效' });
-  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [req.user.id]);
+  if (n > 10000) return res.status(400).json({ error: '单次充值不能超过10000元' });
+  const uid = targetUserId || req.user.id;
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [uid]);
   if (!user) return res.status(404).json({ error: '用户不存在' });
   const balanceBefore = user.balance;
   const balanceAfter = parseFloat((user.balance + n).toFixed(2));
   await dbRun(`UPDATE users SET balance=? WHERE id=?`, [balanceAfter, user.id]);
-  // 记录充值记录
   await dbRun(
-    `INSERT INTO recharge_records (userId, amount, balanceBefore, balanceAfter, createdAt) VALUES (?,?,?,?,?)`,
-    [user.id, n, balanceBefore, balanceAfter, new Date().toISOString()]
+    `INSERT INTO recharge_records (userId, amount, balanceBefore, balanceAfter, method, status, createdAt) VALUES (?,?,?,?,?,?,?)`,
+    [user.id, n, balanceBefore, balanceAfter, 'admin_manual', 'success', new Date().toISOString()]
   );
   res.json({ balance: balanceAfter, message: `充值成功${n}元，当前余额${balanceAfter}元` });
 });
@@ -244,7 +257,7 @@ app.post('/api/generate/text-to-image', authMiddleware, async (req, res) => {
     '3:4': '896*1152', '4:3': '1152*896', '2:3': '832*1216', '3:2': '1216*832'
   };
   const sizeStr = sizeMap[aspectRatio] || '1024*1024';
-  const taskId = Date.now().toString();
+  const taskId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
   await dbRun(
@@ -269,7 +282,11 @@ app.post('/api/generate/text-to-image', authMiddleware, async (req, res) => {
       await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
       const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, 60);
       if (finalStatus === 'succeeded') {
-        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [totalYuan, user.id]);
+        const deducted = await dbRun(`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`, [totalYuan, user.id, totalYuan]);
+        if (deducted.changes === 0) {
+          await dbRun(`UPDATE tasks SET status='failed', error='扣费失败：余额不足' WHERE id=?`, [taskId]);
+          return;
+        }
         // 保存到作品库
         const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
         if (task.result) {
@@ -306,7 +323,7 @@ app.post('/api/generate/text-to-video', authMiddleware, async (req, res) => {
     return res.status(402).json({ error: `余额不足，该操作需要 ${costYuan} 元，当前余额 ${user.balance.toFixed(2)} 元` });
   }
 
-  const taskId = Date.now().toString();
+  const taskId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   await dbRun(
     `INSERT INTO tasks (id, userId, type, planKey, planLabel, status, prompt, aspectRatio, duration, costYuan, createdAt, result, error, galleryId)
@@ -331,7 +348,11 @@ app.post('/api/generate/text-to-video', authMiddleware, async (req, res) => {
       await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
       const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, 180);
       if (finalStatus === 'succeeded') {
-        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [costYuan, user.id]);
+        const deducted = await dbRun(`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`, [costYuan, user.id, costYuan]);
+        if (deducted.changes === 0) {
+          await dbRun(`UPDATE tasks SET status='failed', error='扣费失败：余额不足' WHERE id=?`, [taskId]);
+          return;
+        }
         const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
         if (task.result) {
           const galleryId = Date.now().toString();
@@ -367,7 +388,7 @@ app.post('/api/generate/image-to-video', authMiddleware, upload.single('image'),
     return res.status(402).json({ error: `余额不足，该操作需要 ${costYuan} 元，当前余额 ${user.balance.toFixed(2)} 元` });
   }
 
-  const taskId = Date.now().toString();
+  const taskId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   await dbRun(
     `INSERT INTO tasks (id, userId, type, planKey, planLabel, status, prompt, aspectRatio, duration, costYuan, createdAt, result, error, galleryId)
@@ -413,7 +434,11 @@ app.post('/api/generate/image-to-video', authMiddleware, upload.single('image'),
       await dbRun(`UPDATE tasks SET bailianTaskId=? WHERE id=?`, [bailianTaskId, taskId]);
       const finalStatus = await pollBailianTask(taskId, 'https://dashscope.aliyuncs.com/api/v1/tasks/' + bailianTaskId, timeout);
       if (finalStatus === 'succeeded') {
-        await dbRun(`UPDATE users SET balance=balance-? WHERE id=?`, [costYuan, user.id]);
+        const deducted = await dbRun(`UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?`, [costYuan, user.id, costYuan]);
+        if (deducted.changes === 0) {
+          await dbRun(`UPDATE tasks SET status='failed', error='扣费失败：余额不足' WHERE id=?`, [taskId]);
+          return;
+        }
         const task = await dbGet(`SELECT * FROM tasks WHERE id=?`, [taskId]);
         if (task.result) {
           const galleryId = Date.now().toString();
@@ -462,7 +487,7 @@ app.put('/api/gallery/:id', authMiddleware, async (req, res) => {
   const { title, tags } = req.body;
   const item = await dbGet(`SELECT * FROM gallery WHERE id=? AND userId=?`, [req.params.id, req.user.id]);
   if (!item) return res.status(404).json({ error: '作品不存在' });
-  if (title !== undefined) await dbRun(`UPDATE gallery SET title=? WHERE id=? AND userId=?`, [title, req.params.id, req.user.id]);
+  if (title !== undefined) await dbRun(`UPDATE gallery SET title=? WHERE id=? AND userId=?`, [title, req.params.id, req.user.id]).catch(e => console.error('title update failed:', e.message));
   if (tags !== undefined) await dbRun(`UPDATE gallery SET tags=? WHERE id=? AND userId=?`, [JSON.stringify(tags), req.params.id, req.user.id]);
   const updated = await dbGet(`SELECT * FROM gallery WHERE id=?`, [req.params.id]);
   res.json(pubGallery(updated));
@@ -507,23 +532,17 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
 });
 
 app.get('/api/admin/tasks', adminAuth, async (req, res) => {
-  const tasks = await dbAll(`SELECT * FROM tasks ORDER BY createdAt DESC LIMIT 200`);
-  const result = [];
-  for (const t of tasks) {
-    const u = await dbGet(`SELECT email FROM users WHERE id=?`, [t.userId]).catch(() => null);
-    result.push({ ...pubTask(t), userEmail: u ? u.email : t.userId });
-  }
-  res.json(result);
+  const tasks = await dbAll(
+    `SELECT t.*, u.email as userEmail FROM tasks t LEFT JOIN users u ON t.userId=u.id ORDER BY t.createdAt DESC LIMIT 200`
+  );
+  res.json(tasks.map(t => ({ ...pubTask(t), userEmail: t.userEmail || t.userId })));
 });
 
 app.get('/api/admin/gallery', adminAuth, async (req, res) => {
-  const items = await dbAll(`SELECT * FROM gallery ORDER BY createdAt DESC LIMIT 200`);
-  const result = [];
-  for (const g of items) {
-    const u = await dbGet(`SELECT email FROM users WHERE id=?`, [g.userId]).catch(() => null);
-    result.push({ ...pubGallery(g), userEmail: u ? u.email : g.userId });
-  }
-  res.json(result);
+  const items = await dbAll(
+    `SELECT g.*, u.email as userEmail FROM gallery g LEFT JOIN users u ON g.userId=u.id ORDER BY g.createdAt DESC LIMIT 200`
+  );
+  res.json(items.map(g => ({ ...pubGallery(g), userEmail: g.userEmail || g.userId })));
 });
 
 app.delete('/api/admin/gallery/:id', adminAuth, async (req, res) => {
@@ -661,10 +680,24 @@ app.get('/api/health', (req, res) => res.json({
 
 // ─── 前端路由兜底 ────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/v1/')) {
+    return res.status(404).json({ error: '接口不存在' });
+  }
   res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`AI Media Studio running on http://0.0.0.0:${PORT}`);
   console.log(`已加载 ${appConfig.models.length} 个模型，${appConfig.providers.length} 个服务商`);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down...');
+  server.close(() => { db.close(); process.exit(0); });
+  setTimeout(() => process.exit(1), 10000);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down...');
+  server.close(() => process.exit(0));
 });

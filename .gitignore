@@ -24,3 +24,9 @@ Thumbs.db
 # Uploads
 uploads/tmp/*
 !uploads/tmp/.gitkeep
+data/*.db
+data/*.db-shm
+data/*.db-wal
+backend/.env
+uploads/tmp/
+.workbuddy/

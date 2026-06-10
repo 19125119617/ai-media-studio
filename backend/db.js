@@ -15,6 +15,7 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
 
 // ─── 初始化表结构 ───────────────────────────────────────────────
 db.serialize(() => {
+  db.run('PRAGMA journal_mode=WAL');
   // 用户表
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -40,6 +41,7 @@ db.serialize(() => {
     result TEXT,       -- JSON 数组
     error TEXT,
     galleryId TEXT,
+    bailianTaskId TEXT,
     createdAt TEXT,
     FOREIGN KEY (userId) REFERENCES users(id)
   )`);
@@ -53,6 +55,7 @@ db.serialize(() => {
     prompt TEXT,
     result TEXT,       -- JSON 数组
     costYuan REAL,
+    title TEXT,
     createdAt TEXT,
     tags TEXT,         -- JSON 数组
     FOREIGN KEY (userId) REFERENCES users(id)
@@ -72,7 +75,29 @@ db.serialize(() => {
   )`, (err) => {
     if (err) console.error('建表失败:', err.message);
     else console.log('SQLite 初始化完成');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(userId)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_gallery_user ON gallery(userId)');
   });
 });
 
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+}
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+  });
+}
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) { err ? reject(err) : resolve(this); });
+  });
+}
+
 module.exports = db;
+module.exports.dbGet = dbGet;
+module.exports.dbAll = dbAll;
+module.exports.dbRun = dbRun;
