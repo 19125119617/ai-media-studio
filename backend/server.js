@@ -216,6 +216,28 @@ app.get('/api/models', (req, res) => {
   res.json(getEnabledModels());
 });
 
+// ─── 模型定价（公开） ──────────────────────────────────────────────────────────
+app.get('/api/models/pricing', (req, res) => {
+  const models = (appConfig.models || []).map(m => ({
+    id: m.id,
+    label: m.label || m.id,
+    type: m.type,
+    subtype: m.subtype || null,
+    provider: m.providerId || 'system',
+    description: m.description || '',
+    price: m.price || 0,
+    perSec: m.perSec || false,
+    enabled: m.enabled !== false
+  }));
+  const providers = (appConfig.providers || []).map(p => ({
+    id: p.id,
+    name: p.name,
+    enabled: p.enabled !== false
+  }));
+  res.json({ models, providers });
+});
+
+
 // ─── 余额充值 ────────────────────────────────────────────────────────────────
 // 充值接口 - 需要管理员认证
 app.post('/api/balance/recharge', authMiddleware, adminAuth, async (req, res) => {

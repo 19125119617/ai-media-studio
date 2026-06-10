@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API 模型广场 - AI 创作工坊</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f8fafc; --bg3: #f1f5f9;
+    --fg: #0f172a; --fg2: #475569; --fg3: #94a3b8;
+    --border: #e2e8f0; --border2: #cbd5e1;
+    --primary: #6366f1; --primary-bg: #eef2ff; --primary-fg: #4338ca;
+    --green: #10b981; --green-bg: #ecfdf5;
+    --red: #ef4444; --red-bg: #fef2f2;
+    --orange: #f59e0b; --orange-bg: #fffbeb;
+    --blue: #3b82f6; --blue-bg: #eff6ff;
+    --purple: #8b5cf6; --purple-bg: #f5f3ff;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow2: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
+    --radius: 12px; --radius-sm: 8px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  }
+  .dark {
+    --bg: #0f172a; --bg2: #1e293b; --bg3: #334155;
+    --fg: #f1f5f9; --fg2: #94a3b8; --fg3: #64748b;
+    --border: #334155; --border2: #475569;
+    --primary-bg: #1e1b4b; --primary-fg: #a5b4fc;
+    --green-bg: #064e3b; --red-bg: #450a0a;
+    --orange-bg: #451a03; --blue-bg: #1e3a5f; --purple-bg: #2e1065;
+    --shadow: 0 1px 3px rgba(0,0,0,.3); --shadow2: 0 4px 6px rgba(0,0,0,.25);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--fg); line-height: 1.6; transition: background .3s, color .3s; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Header */
+  .header { position: sticky; top: 0; z-index: 100; background: var(--bg); border-bottom: 1px solid var(--border); backdrop-filter: blur(12px); }
+  .header-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--fg); }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; font-weight: 800; }
+  .nav { display: flex; align-items: center; gap: 24px; }
+  .nav a { color: var(--fg2); font-size: 14px; font-weight: 500; padding: 6px 0; border-bottom: 2px solid transparent; }
+  .nav a:hover, .nav a.active { color: var(--primary); border-color: var(--primary); text-decoration: none; }
+  .theme-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; color: var(--fg2); font-size: 16px; transition: all .2s; }
+  .theme-btn:hover { background: var(--bg2); border-color: var(--border2); }
+
+  /* Hero */
+  .hero { background: linear-gradient(135deg, var(--primary-bg), var(--bg)); padding: 60px 24px 48px; text-align: center; }
+  .hero h1 { font-size: 36px; font-weight: 800; margin-bottom: 12px; background: linear-gradient(135deg, var(--primary), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .hero p { font-size: 16px; color: var(--fg2); max-width: 600px; margin: 0 auto 24px; }
+  .hero-stats { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 28px; font-weight: 800; color: var(--primary); }
+  .hero-stat .label { font-size: 13px; color: var(--fg3); margin-top: 2px; }
+
+  /* API Quick Start */
+  .quickstart { max-width: 1200px; margin: -24px auto 0; padding: 0 24px; position: relative; z-index: 10; }
+  .qs-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow2); }
+  .qs-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .qs-code { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; white-space: pre; color: var(--fg); }
+  .qs-code .comment { color: var(--fg3); }
+  .qs-code .string { color: var(--green); }
+  .qs-code .keyword { color: var(--purple); }
+
+  /* Main Content */
+  .main { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .search-box { flex: 1; min-width: 200px; position: relative; }
+  .search-box input { width: 100%; padding: 10px 16px 10px 40px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: 14px; outline: none; transition: border-color .2s; }
+  .search-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,.1); }
+  .search-box::before { content: '\1F50D'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: .5; }
+  .filter-btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg2); font-size: 13px; cursor: pointer; transition: all .2s; font-weight: 500; }
+  .filter-btn:hover, .filter-btn.active { background: var(--primary-bg); color: var(--primary-fg); border-color: var(--primary); }
+  .model-count { font-size: 13px; color: var(--fg3); margin-left: auto; white-space: nowrap; }
+
+  /* Table */
+  .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg2); }
+  th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 700; color: var(--fg3); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: var(--fg); }
+  th .sort-icon { margin-left: 4px; font-size: 10px; }
+  td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg2); }
+  .model-name { font-weight: 600; color: var(--fg); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+  .provider { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2); }
+  .provider-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 1.6; }
+  .tag-green { background: var(--green-bg); color: var(--green); }
+  .tag-red { background: var(--red-bg); color: var(--red); }
+  .tag-blue { background: var(--blue-bg); color: var(--blue); }
+  .tag-orange { background: var(--orange-bg); color: var(--orange); }
+  .tag-purple { background: var(--purple-bg); color: var(--purple); }
+  .price-cell { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+  .price-input { color: var(--fg2); }
+  .price-output { color: var(--primary); font-weight: 600; }
+  .price-unit { color: var(--fg3); font-size: 11px; }
+  .type-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .type-text { background: var(--blue-bg); color: var(--blue); }
+  .type-image { background: var(--green-bg); color: var(--green); }
+  .type-video { background: var(--purple-bg); color: var(--purple); }
+  .type-audio { background: var(--orange-bg); color: var(--orange); }
+  .empty-state { text-align: center; padding: 60px 24px; color: var(--fg3); }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* API Endpoints Section */
+  .section { margin-top: 48px; }
+  .section h2 { font-size: 22px; font-weight: 800; margin-bottom: 20px; }
+  .endpoint-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .ep-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 20px; transition: box-shadow .2s; }
+  .ep-card:hover { box-shadow: var(--shadow2); }
+  .ep-method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 8px; }
+  .ep-post { background: var(--green-bg); color: var(--green); }
+  .ep-get { background: var(--blue-bg); color: var(--blue); }
+  .ep-path { font-family: monospace; font-size: 13px; font-weight: 600; }
+  .ep-desc { font-size: 13px; color: var(--fg2); margin-top: 8px; }
+
+  /* Footer */
+  .footer { border-top: 1px solid var(--border); padding: 32px 24px; text-align: center; font-size: 13px; color: var(--fg3); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 26px; }
+    .hero-stats { gap: 24px; }
+    .nav { display: none; }
+    .endpoint-grid { grid-template-columns: 1fr; }
+    .table-wrap { overflow-x: auto; }
+    table { min-width: 700px; }
+  }
+</style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="logo"><div class="logo-icon">AI</div> AI 创作工坊</a>
+      <nav class="nav">
+        <a href="/">首页</a>
+        <a href="/pricing.html" class="active">模型广场</a>
+        <a href="/admin.html">管理</a>
+      </nav>
+      <button class="theme-btn" onclick="toggleTheme()" title="切换主题">🌓</button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1>API 模型广场</h1>
+    <p>阿里云百炼驱动 · AI 图像与视频生成 API 服务，支持文生图、文生视频、图生视频，按量计费、透明定价</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num" id="stat-models">--</div><div class="label">可用模型</div></div>
+      <div class="hero-stat"><div class="num" id="stat-providers">--</div><div class="label">服务商</div></div>
+      <div class="hero-stat"><div class="num">99.9%</div><div class="label">可用率</div></div>
+      <div class="hero-stat"><div class="num">&lt;200ms</div><div class="label">平均延迟</div></div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <div class="quickstart">
+    <div class="qs-card">
+      <div class="qs-title">⚡ 快速接入示例</div>
+      <div class="qs-code"><span class="comment">// 文生图 API 调用示例</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> fetch(<span class="string">'http://101.200.84.23:3001/api/generate/text-to-image'</span>, {
+  method: <span class="string">'POST'</span>,
+  headers: {
+    <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+    <span class="string">'Authorization'</span>: <span class="string">'Bearer YOUR_JWT_TOKEN'</span>
+  },
+  body: JSON.stringify({
+    prompt: <span class="string">'一只猫咪在樱花树下'</span>,
+    planKey: <span class="string">'wan2.7-image'</span>,    <span class="comment">// 模型方案 ID</span>
+    aspectRatio: <span class="string">'1:1'</span>,        <span class="comment">// 比例: 1:1, 16:9, 9:16, 3:4, 4:3</span>
+    n: <span class="string">1</span>                        <span class="comment">// 生成数量</span>
+  })
+});
+<span class="comment">// 返回: { taskId, status, costYuan }</span>
+<span class="comment">// 轮询 GET /api/task/:taskId 获取结果</span></div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="搜索模型名称..." oninput="filterModels()">
+      </div>
+      <button class="filter-btn active" data-type="all" onclick="setTypeFilter('all', this)">全部</button>
+      <button class="filter-btn" data-type="text" onclick="setTypeFilter('text', this)">文本</button>
+      <button class="filter-btn" data-type="image" onclick="setTypeFilter('image', this)">图片</button>
+      <button class="filter-btn" data-type="video" onclick="setTypeFilter('video', this)">视频</button>
+      <button class="filter-btn" data-type="audio" onclick="setTypeFilter('audio', this)">音频</button>
+      <span class="model-count" id="modelCount"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('status')">状态 <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('name')">模型名称 <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('type')">类型 <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('provider')">服务商 <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('inputPrice')">输入价格 <span class="sort-icon">↕</span></th>
+            <th onclick="sortBy('outputPrice')">输出价格 <span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="modelTable">
+          <tr><td colspan="6" class="empty-state"><div class="icon">⏳</div>加载模型列表中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- API Endpoints -->
+    <div class="section">
+      <h2>📡 API 接口</h2>
+      <div class="endpoint-grid">
+        <div class="ep-card">
+          <span class="ep-method ep-get">GET</span><span class="ep-path">/api/models</span>
+          <div class="ep-desc">获取所有已启用的模型列表，包含模型 ID、类型、方案标签等信息</div>
+        </div>
+        <div class="ep-card">
+          <span class="ep-method ep-get">GET</span><span class="ep-path">/api/models/pricing</span>
+          <div class="ep-desc">获取模型定价信息，包含所有模型的价格、类型和服务商（无需认证）</div>
+        </div>
+        <div class="ep-card">
+          <span class="ep-method ep-post">POST</span><span class="ep-path">/api/generate/text-to-image</span>
+          <div class="ep-desc">文生图接口，支持 wan2.7、wanx2.0 等模型。可选尺寸比例和数量，按张计费</div>
+        </div>
+        <div class="ep-card">
+          <span class="ep-method ep-post">POST</span><span class="ep-path">/api/generate/text-to-video</span>
+          <div class="ep-desc">文生视频接口，支持 wan2.7 和欢乐马模型，可选分辨率和时长，按秒计费</div>
+        </div>
+        <div class="ep-card">
+          <span class="ep-method ep-post">POST</span><span class="ep-path">/api/generate/image-to-video</span>
+          <div class="ep-desc">图生视频接口，上传首帧图片生成动态视频，支持 wan2.7 和欢乐马模型</div>
+        </div>
+        <div class="ep-card">
+          <span class="ep-method ep-get">GET</span><span class="ep-path">/api/task/:taskId</span>
+          <div class="ep-desc">查询生成任务状态和结果。任务异步执行，需轮询获取最终结果</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How to Get API Key -->
+    <div class="section">
+      <h2>🔑 如何使用 API</h2>
+      <div class="qs-card" style="background:var(--bg2);">
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 24px; padding: 8px 0;">
+          <div>
+            <div style="font-size:28px; margin-bottom:8px;">①</div>
+            <div style="font-weight:700; margin-bottom:4px;">注册账号</div>
+            <div style="font-size:13px; color:var(--fg2);">访问 <a href="/">AI 创作工坊</a> 注册免费账号</div>
+          </div>
+          <div>
+            <div style="font-size:28px; margin-bottom:8px;">②</div>
+            <div style="font-weight:700; margin-bottom:4px;">登录获取 Token</div>
+            <div style="font-size:13px; color:var(--fg2);">调用登录接口获取 JWT Token，用于后续所有 API 请求的 Authorization 头</div>
+          </div>
+          <div>
+            <div style="font-size:28px; margin-bottom:8px;">③</div>
+            <div style="font-weight:700; margin-bottom:4px;">充值余额</div>
+            <div style="font-size:13px; color:var(--fg2);">联系管理员充值余额后即可使用，按实际调用量自动扣费</div>
+          </div>
+          <div>
+            <div style="font-size:28px; margin-bottom:8px;">④</div>
+            <div style="font-weight:700; margin-bottom:4px;">调用 API</div>
+            <div style="font-size:13px; color:var(--fg2);">选择模型方案，调用生成接口提交任务，轮询获取结果</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>AI 创作工坊 · 阿里云百炼驱动 · 图像与视频生成 API 服务</p>
+    <p style="margin-top:4px;">联系: 19125119617@163.com</p>
+  </footer>
+
+<script>
+  // Theme
+  function toggleTheme() {
+    document.body.classList.toggle('dark');
+    localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+  }
+  if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && matchMedia('(prefers-color-scheme:dark)').matches)) {
+    document.body.classList.add('dark');
+  }
+
+  // State
+  let allModels = [];
+  let currentFilter = 'all';
+  let currentSort = { key: 'name', asc: true };
+
+  // Provider colors
+  const providerColors = { openai: '#10b981', anthropic: '#f59e0b', google: '#3b82f6', bailian: '#8b5cf6', volcengine: '#ef4444', dashscope: '#8b5cf6' };
+
+  // Fetch models from real API
+  async function loadModels() {
+    try {
+      const resp = await fetch('/api/models/pricing').catch(() => null);
+      if (resp && resp.ok) {
+        const data = await resp.json();
+        if (data.models && data.models.length > 0) {
+          // Build provider name map from API response
+          const providerMap = {};
+          if (data.providers) data.providers.forEach(p => { providerMap[p.id] = p.name; });
+
+          allModels = data.models.map(m => ({
+            id: m.id,
+            name: m.id,
+            label: m.label || m.id,
+            type: m.type || 'text',
+            subtype: m.subtype || null,
+            provider: providerMap[m.provider] || m.provider || 'system',
+            description: m.description || '',
+            status: m.enabled ? 'active' : 'inactive',
+            price: m.price || 0,
+            perSec: m.perSec || false,
+            inputPrice: m.price || 0,
+            outputPrice: 0
+          }));
+          renderModels();
+          return;
+        }
+      }
+      // Fallback: show demo models
+      allModels = getDemoModels();
+      renderModels();
+    } catch (e) {
+      allModels = getDemoModels();
+      renderModels();
+    }
+  }
+
+  function guessType(id) {
+    if (id.includes('image') || id.includes('dall') || id.includes('wan') || id.includes('flux') || id.includes('midjourney')) return 'image';
+    if (id.includes('video') || id.includes('sora') || id.includes('wan2') || id.includes('happyhorse')) return 'video';
+    if (id.includes('audio') || id.includes('whisper') || id.includes('tts')) return 'audio';
+    return 'text';
+  }
+
+  function guessProvider(m) {
+    const id = (m.id || m.owned_by || '').toLowerCase();
+    if (id.includes('gpt') || id.includes('openai') || id.includes('o1') || id.includes('o3')) return 'OpenAI';
+    if (id.includes('claude') || id.includes('anthropic')) return 'Anthropic';
+    if (id.includes('gemini') || id.includes('google')) return 'Google';
+    if (id.includes('wan') || id.includes('dashscope') || id.includes('qwen') || id.includes('happyhorse')) return '阿里云百炼';
+    if (id.includes('doubao') || id.includes('volc')) return '火山引擎';
+    if (id.includes('deepseek')) return 'DeepSeek';
+    if (m.owned_by) return m.owned_by;
+    return 'system';
+  }
+
+  function getDemoModels() {
+    return [
+      { id: 'gpt-4o', name: 'gpt-4o', type: 'text', provider: 'OpenAI', status: 'active', inputPrice: 2.50, outputPrice: 10.00 },
+      { id: 'gpt-4o-mini', name: 'gpt-4o-mini', type: 'text', provider: 'OpenAI', status: 'active', inputPrice: 0.15, outputPrice: 0.60 },
+      { id: 'gpt-4.1', name: 'gpt-4.1', type: 'text', provider: 'OpenAI', status: 'active', inputPrice: 2.00, outputPrice: 8.00 },
+      { id: 'gpt-4.1-mini', name: 'gpt-4.1-mini', type: 'text', provider: 'OpenAI', status: 'active', inputPrice: 0.40, outputPrice: 1.60 },
+      { id: 'o3-mini', name: 'o3-mini', type: 'text', provider: 'OpenAI', status: 'active', inputPrice: 1.10, outputPrice: 4.40 },
+      { id: 'claude-3.5-sonnet', name: 'claude-3.5-sonnet', type: 'text', provider: 'Anthropic', status: 'active', inputPrice: 3.00, outputPrice: 15.00 },
+      { id: 'claude-3.5-haiku', name: 'claude-3.5-haiku', type: 'text', provider: 'Anthropic', status: 'active', inputPrice: 0.80, outputPrice: 4.00 },
+      { id: 'claude-3-opus', name: 'claude-3-opus', type: 'text', provider: 'Anthropic', status: 'active', inputPrice: 15.00, outputPrice: 75.00 },
+      { id: 'gemini-2.0-flash', name: 'gemini-2.0-flash', type: 'text', provider: 'Google', status: 'active', inputPrice: 0.10, outputPrice: 0.40 },
+      { id: 'gemini-2.5-pro', name: 'gemini-2.5-pro', type: 'text', provider: 'Google', status: 'active', inputPrice: 1.25, outputPrice: 10.00 },
+      { id: 'deepseek-chat', name: 'deepseek-chat', type: 'text', provider: 'DeepSeek', status: 'active', inputPrice: 0.27, outputPrice: 1.10 },
+      { id: 'deepseek-reasoner', name: 'deepseek-reasoner', type: 'text', provider: 'DeepSeek', status: 'active', inputPrice: 0.55, outputPrice: 2.19 },
+      { id: 'qwen-max', name: 'qwen-max', type: 'text', provider: '阿里云百炼', status: 'active', inputPrice: 2.00, outputPrice: 6.00 },
+      { id: 'qwen-plus', name: 'qwen-plus', type: 'text', provider: '阿里云百炼', status: 'active', inputPrice: 0.80, outputPrice: 2.00 },
+      { id: 'dall-e-3', name: 'dall-e-3', type: 'image', provider: 'OpenAI', status: 'active', inputPrice: 40.00, outputPrice: 0 },
+      { id: 'wan2.7-image', name: 'wan2.7-image', type: 'image', provider: '阿里云百炼', status: 'active', inputPrice: 0.50, outputPrice: 0 },
+      { id: 'wan2.7-t2v-720', name: 'wan2.7-t2v-720', type: 'video', provider: '阿里云百炼', status: 'active', inputPrice: 1.00, outputPrice: 0 },
+      { id: 'wan2.7-i2v-720', name: 'wan2.7-i2v-720', type: 'video', provider: '阿里云百炼', status: 'active', inputPrice: 1.00, outputPrice: 0 },
+      { id: 'whisper-1', name: 'whisper-1', type: 'audio', provider: 'OpenAI', status: 'active', inputPrice: 6.00, outputPrice: 0 },
+    ];
+  }
+
+  function renderModels() {
+    const tbody = document.getElementById('modelTable');
+    const search = document.getElementById('searchInput').value.toLowerCase();
+
+    let filtered = allModels.filter(m => {
+      if (currentFilter !== 'all' && m.type !== currentFilter) return false;
+      if (search && !m.name.toLowerCase().includes(search) && !m.provider.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    // Sort
+    filtered.sort((a, b) => {
+      let va = a[currentSort.key] || '', vb = b[currentSort.key] || '';
+      if (typeof va === 'string') va = va.toLowerCase();
+      if (typeof vb === 'string') vb = vb.toLowerCase();
+      if (va < vb) return currentSort.asc ? -1 : 1;
+      if (va > vb) return currentSort.asc ? 1 : -1;
+      return 0;
+    });
+
+    // Update stats
+    document.getElementById('stat-models').textContent = allModels.length;
+    const providers = new Set(allModels.map(m => m.provider));
+    document.getElementById('stat-providers').textContent = providers.size;
+    document.getElementById('modelCount').textContent = `显示 ${filtered.length} / ${allModels.length} 个模型`;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="icon">🔍</div>没有找到匹配的模型</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(m => {
+      const statusTag = m.status === 'active'
+        ? '<span class="tag tag-green">可用</span>'
+        : '<span class="tag tag-red">不可用</span>';
+
+      const typeClass = { text: 'type-text', image: 'type-image', video: 'type-video', audio: 'type-audio' }[m.type] || 'type-text';
+      const typeLabel = { text: '文本', image: '图片', video: '视频', audio: '音频' }[m.type] || m.type;
+
+      const pColor = providerColors[m.provider.toLowerCase()] || '#6366f1';
+      const providerHtml = `<span class="provider"><span class="provider-dot" style="background:${pColor}"></span>${m.provider}</span>`;
+
+      let inputPriceHtml, outputPriceHtml;
+      if (m.perSec) {
+        // Video models: per-second pricing
+        inputPriceHtml = `<span class="price-cell"><span class="price-input">¥${m.price.toFixed(2)}</span> <span class="price-unit">/ 秒</span></span>`;
+        outputPriceHtml = '<span class="price-cell"><span class="price-unit">—</span></span>';
+      } else if (m.type === 'image') {
+        inputPriceHtml = `<span class="price-cell"><span class="price-input">¥${m.price.toFixed(2)}</span> <span class="price-unit">/ 次</span></span>`;
+        outputPriceHtml = '<span class="price-cell"><span class="price-unit">—</span></span>';
+      } else if (m.type === 'audio') {
+        inputPriceHtml = `<span class="price-cell"><span class="price-input">$${m.inputPrice.toFixed(2)}</span> <span class="price-unit">/ min</span></span>`;
+        outputPriceHtml = '<span class="price-cell"><span class="price-unit">—</span></span>';
+      } else {
+        inputPriceHtml = `<span class="price-cell"><span class="price-input">$${m.inputPrice.toFixed(2)}</span> <span class="price-unit">/ 1M tokens</span></span>`;
+        outputPriceHtml = `<span class="price-cell"><span class="price-output">$${m.outputPrice.toFixed(2)}</span> <span class="price-unit">/ 1M tokens</span></span>`;
+      }
+
+      const nameDisplay = m.label && m.label !== m.name
+        ? `<span class="model-name">${m.name}</span><br><span style="font-size:11px;color:var(--fg3)">${m.label}${m.description ? ' · ' + m.description : ''}</span>`
+        : `<span class="model-name">${m.name}</span>`;
+
+      return `<tr>
+        <td>${statusTag}</td>
+        <td>${nameDisplay}</td>
+        <td><span class="type-badge ${typeClass}">${typeLabel}</span></td>
+        <td>${providerHtml}</td>
+        <td>${inputPriceHtml}</td>
+        <td>${outputPriceHtml}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function filterModels() { renderModels(); }
+
+  function setTypeFilter(type, btn) {
+    currentFilter = type;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderModels();
+  }
+
+  function sortBy(key) {
+    if (currentSort.key === key) currentSort.asc = !currentSort.asc;
+    else { currentSort.key = key; currentSort.asc = true; }
+    renderModels();
+  }
+
+  // Init
+  loadModels();
+</script>
+</body>
+</html>
