@@ -43,20 +43,21 @@ const router = useRouter()
 const showMenu = ref(false)
 
 const tabs = [
-  { id: 'home', label: 'API 模型' },
-  { id: 'create', label: '创作' },
-  { id: 'gallery', label: '作品库' },
-  { id: 'history', label: '历史' },
-  { id: 'stats', label: '统计' }
+  { id: 'home', label: '🤖 API 模型' },
+  { id: 'models', label: '📚 模型库' },
+  { id: 'create', label: '✨ 创作' },
+  { id: 'gallery', label: '🎨 作品库' },
+  { id: 'history', label: '📋 历史' },
+  { id: 'stats', label: '📊 统计' }
 ]
 
 const avatarLetter = computed(() =>
-  (auth.currentUser?.username?.charAt(0) || 'U').toUpperCase()
+  (auth.currentUser?.nickname || auth.currentUser?.email || 'U').charAt(0).toUpperCase()
 )
 
 function go(page) {
   showMenu.value = false
-  const map = { home: '/', create: '/create', gallery: '/gallery', history: '/history', stats: '/stats' }
+  const map = { home: '/', models: '/models', create: '/create', gallery: '/gallery', history: '/history', stats: '/stats' }
   router.push(map[page])
 }
 

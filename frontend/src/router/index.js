@@ -4,6 +4,7 @@ import CreateView from '../views/CreateView.vue'
 import GalleryView from '../views/GalleryView.vue'
 import HistoryView from '../views/HistoryView.vue'
 import StatsView from '../views/StatsView.vue'
+import ModelsView from '../views/ModelsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: '/gallery', name: 'gallery', component: GalleryView },
     { path: '/history', name: 'history', component: HistoryView },
     { path: '/stats', name: 'stats', component: StatsView },
+    { path: '/models', name: 'models', component: ModelsView },
   ]
 })
 
