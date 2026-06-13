@@ -30,3 +30,4 @@ data/*.db-wal
 backend/.env
 uploads/tmp/
 .workbuddy/
+frontend-old/
