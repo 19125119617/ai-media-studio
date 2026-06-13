@@ -6,6 +6,8 @@ import HistoryView from '../views/HistoryView.vue'
 import StatsView from '../views/StatsView.vue'
 import ModelsView from '../views/ModelsView.vue'
 
+import AdminView from '../views/AdminView.vue'
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -15,6 +17,7 @@ const router = createRouter({
     { path: '/history', name: 'history', component: HistoryView },
     { path: '/stats', name: 'stats', component: StatsView },
     { path: '/models', name: 'models', component: ModelsView },
+    { path: '/admin', name: 'admin', component: AdminView },
   ]
 })
 

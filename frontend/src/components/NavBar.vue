@@ -24,6 +24,7 @@
         </div>
         <div class="nav-user-menu" :class="{ show: showMenu }">
           <button @click="go('stats')">📊 统计概览</button>
+          <button @click="go('admin')" style="color:#8b6cf5;font-weight:500">⚙️ 管理后台</button>
           <hr style="border:none;border-top:1px solid var(--border);margin:6px 0">
           <button @click="doLogout()">⏻ 退出登录</button>
         </div>
@@ -57,7 +58,7 @@ const avatarLetter = computed(() =>
 
 function go(page) {
   showMenu.value = false
-  const map = { home: '/', models: '/models', create: '/create', gallery: '/gallery', history: '/history', stats: '/stats' }
+  const map = { home: '/', models: '/models', create: '/create', gallery: '/gallery', history: '/history', stats: '/stats', admin: '/admin' }
   router.push(map[page])
 }
 
