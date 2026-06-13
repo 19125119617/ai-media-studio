@@ -19,7 +19,6 @@
           <span class="admin-badge">ADMIN</span>
         </div>
         <div class="topbar-right">
-          <a href="/" @click.prevent="goHome">← 返回前台</a>
           <button @click="loadAll">🔄 刷新</button>
         </div>
       </div>

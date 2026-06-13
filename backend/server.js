@@ -15,6 +15,9 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'ai_media_studio_secret_2026';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
+if (!process.env.JWT_SECRET) console.warn('⚠️ 安全警告: JWT_SECRET 使用默认值，生产环境请通过 .env 设置自定义密钥');
+if (!process.env.ADMIN_PASSWORD) console.warn('⚠️ 安全警告: ADMIN_PASSWORD 使用默认值，生产环境请通过 .env 设置管理密码');
+
 // ─── 配置文件加载 ─────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 let appConfig = { providers: [], models: [] };

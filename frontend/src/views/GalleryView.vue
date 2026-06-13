@@ -107,11 +107,16 @@ function viewItem(item) {
 }
 
 function downloadItem(item) {
-  // TODO: implement download
+  if (item.url) {
+    const a = document.createElement('a')
+    a.href = item.url
+    a.download = item.prompt?.slice(0, 30) + '.' + (item.url.split('.').pop() || 'jpg')
+    a.target = '_blank'
+    a.click()
+  }
 }
 
 function deleteItem(id) {
-  // TODO: confirm before delete
   gallery.deleteItem(id)
 }
 

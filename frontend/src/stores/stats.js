@@ -16,7 +16,11 @@ export const useStatsStore = defineStore('stats', {
         const res = await axios.get('/api/stats')
         this.stats = res.data
       } catch (err) {
-        this.error = err.response?.data?.error || '加载失败'
+        // 用户端统计接口暂未实现，静默处理
+        this.stats = null
+        if (err.response?.status !== 404) {
+          this.error = err.response?.data?.error || '加载失败'
+        }
       } finally {
         this.loading = false
       }
@@ -26,7 +30,7 @@ export const useStatsStore = defineStore('stats', {
         const res = await axios.get('/api/recharge/records')
         this.rechargeRecords = res.data
       } catch (err) {
-        throw err.response?.data?.error || '加载失败'
+        console.error('充值记录加载失败:', err.message)
       }
     },
     async recharge(amount, method) {
@@ -34,7 +38,8 @@ export const useStatsStore = defineStore('stats', {
         const res = await axios.post('/api/recharge', { amount, method })
         return res.data
       } catch (err) {
-        throw err.response?.data?.error || '充值失败'
+        console.error('充值失败:', err.message)
+        throw err.response?.data?.error || '充值功能暂未开放'
       }
     }
   }
