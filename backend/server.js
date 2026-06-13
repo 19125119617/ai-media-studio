@@ -700,6 +700,11 @@ app.get('/api/health', (req, res) => res.json({
   models: getEnabledModels().length, providers: appConfig.providers.length
 }));
 
+// ─── 管理后台页面 ────────────────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/public/admin.html'));
+});
+
 // ─── 前端路由兜底 ────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/v1/')) {

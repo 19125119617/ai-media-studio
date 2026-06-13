@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 · AI 创作工坊</title>
+<style>
+  :root {
+    --bg: #080910; --bg2: #0f1219; --bg3: #161b27; --bg4: #1e2537; --bg5: #26304a;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0; --text2: #9ba3b8; --text3: #555e78;
+    --purple: #8b6cf5; --purple2: #6d4fd4; --purple-bg: rgba(139,108,245,.12);
+    --teal: #00d4aa; --amber: #f5a623; --red: #f04040; --green: #22c97d;
+    --radius: 16px; --radius-sm: 10px;
+    --font: -apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: 56px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 32px; justify-content: space-between;
+  }
+  .topbar h1 { font-size: 16px; font-weight: 700; }
+  .topbar .badge { font-size: 11px; background: var(--red); color: #fff; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .topbar-right input {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 6px 12px; font-size: 13px; outline: none; width: 180px;
+  }
+  .topbar-right input::placeholder { color: var(--text3); }
+  .topbar-right button {
+    background: var(--purple); color: #fff; border: none; border-radius: 8px;
+    padding: 6px 16px; font-size: 13px; cursor: pointer;
+  }
+  .topbar-right button:hover { background: var(--purple2); }
+  .topbar-right a { color: var(--text2); text-decoration: none; font-size: 13px; }
+  .topbar-right a:hover { color: var(--text); }
+
+  .main { padding: 76px 32px 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .stat-value { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .stat-value.purple { color: var(--purple); }
+  .stat-value.teal { color: var(--teal); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-label { font-size: 12px; color: var(--text2); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg3); border-radius: 10px; padding: 4px; flex-wrap: wrap; }
+  .tab { padding: 8px 20px; border: none; background: transparent; color: var(--text2); border-radius: 8px; cursor: pointer; font-size: 14px; transition: all .2s; white-space: nowrap; }
+  .tab.active { background: var(--purple); color: #fff; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* Table */
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 12px 16px; text-align: left; color: var(--text2); font-weight: 500; border-bottom: 1px solid var(--border); background: var(--bg3); white-space: nowrap; }
+  td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg3); }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; display: inline-block; }
+  .tag.success { background: rgba(34,201,125,.15); color: var(--green); }
+  .tag.fail { background: rgba(240,64,64,.15); color: var(--red); }
+  .tag.pending { background: rgba(245,166,35,.15); color: var(--amber); }
+  .tag.running { background: rgba(139,108,245,.15); color: var(--purple); }
+  .tag.image { background: rgba(0,212,170,.15); color: var(--teal); }
+  .tag.video { background: rgba(139,108,245,.15); color: var(--purple); }
+  .tag.enabled { background: rgba(34,201,125,.15); color: var(--green); }
+  .tag.disabled { background: rgba(240,64,64,.15); color: var(--red); }
+  .thumb { width: 60px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--bg3); }
+  .thumb video { width: 60px; height: 40px; border-radius: 6px; object-fit: cover; }
+  .prompt-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
+  .empty { text-align: center; padding: 60px; color: var(--text3); }
+  .empty-sm { text-align: center; padding: 32px; color: var(--text3); font-size: 13px; }
+
+  /* Action buttons */
+  .btn-sm { padding: 4px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; transition: all .2s; }
+  .btn-edit { background: var(--bg4); color: var(--text2); }
+  .btn-edit:hover { background: var(--purple-bg); color: var(--purple); }
+  .btn-del { background: rgba(240,64,64,.1); color: var(--red); }
+  .btn-del:hover { background: rgba(240,64,64,.2); }
+  .btn-on { background: rgba(34,201,125,.1); color: var(--green); }
+  .btn-on:hover { background: rgba(34,201,125,.2); }
+  .btn-off { background: rgba(245,166,35,.1); color: var(--amber); }
+  .btn-off:hover { background: rgba(245,166,35,.2); }
+
+  /* Toggle switch */
+  .toggle { position: relative; width: 36px; height: 20px; display: inline-block; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--bg5); border-radius: 20px; cursor: pointer; transition: .2s; }
+  .toggle-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .toggle-slider { background: var(--green); }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+  /* Panel header with add button */
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .panel-head h3 { font-size: 14px; font-weight: 600; }
+  .btn-add { background: var(--purple); color: #fff; border: none; border-radius: 8px; padding: 7px 16px; font-size: 13px; cursor: pointer; }
+  .btn-add:hover { background: var(--purple2); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 300;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 20px; width: 520px; max-height: 85vh; overflow-y: auto; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .modal-head h3 { font-size: 16px; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 4px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 24px; }
+  .form-row { margin-bottom: 16px; }
+  .form-row:last-child { margin-bottom: 0; }
+  .form-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); padding: 9px 14px; font-size: 13px; outline: none;
+  }
+  .form-input:focus { border-color: var(--purple); }
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border); }
+  .btn-cancel { background: var(--bg4); color: var(--text2); border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; cursor: pointer; }
+  .btn-cancel:hover { color: var(--text); }
+  .btn-submit { background: var(--purple); color: #fff; border: none; border-radius: 8px; padding: 8px 20px; font-size: 13px; cursor: pointer; }
+  .btn-submit:hover { background: var(--purple2); }
+  .modal-foot .error { color: var(--red); font-size: 12px; margin-right: auto; align-self: center; }
+
+  /* Login overlay */
+  #login-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 500;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .login-box { width: 360px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 20px; padding: 40px; text-align: center; }
+  .login-box h2 { font-size: 20px; margin-bottom: 24px; }
+  .login-box input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); padding: 12px 16px; font-size: 14px; outline: none; margin-bottom: 12px;
+  }
+  .login-box input:focus { border-color: var(--purple); }
+  .login-box button { width: 100%; background: var(--purple); color: #fff; border: none; border-radius: var(--radius-sm); padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .login-box button:hover { background: var(--purple2); }
+  .login-box .error { color: var(--red); font-size: 12px; margin-top: 8px; min-height: 16px; }
+
+  @media (max-width: 1100px) {
+    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .main { padding: 76px 16px 16px; }
+    .topbar { padding: 0 16px; }
+    .modal { width: 95%; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h2>🔐 管理后台</h2>
+    <input type="password" id="admin-pwd" placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">进入后台</button>
+    <div class="error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- Topbar -->
+<div class="topbar" style="display:none" id="topbar">
+  <div style="display:flex;align-items:center">
+    <h1>AI 创作工坊</h1>
+    <span class="badge">ADMIN</span>
+  </div>
+  <div class="topbar-right">
+    <a href="/">← 返回前台</a>
+    <button onclick="loadAll()">🔄 刷新</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main" style="display:none" id="main">
+
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-value purple" id="s-users">0</div><div class="stat-label">总用户数</div></div>
+    <div class="stat-card"><div class="stat-value teal" id="s-tasks">0</div><div class="stat-label">总任务数</div></div>
+    <div class="stat-card"><div class="stat-value" id="s-gallery">0</div><div class="stat-label">作品数</div></div>
+    <div class="stat-card"><div class="stat-value amber" id="s-revenue">0</div><div class="stat-label">总收入（元）</div></div>
+    <div class="stat-card"><div class="stat-value green" id="s-today-tasks">0</div><div class="stat-label">今日任务</div></div>
+    <div class="stat-card"><div class="stat-value amber" id="s-today-revenue">0</div><div class="stat-label">今日收入（元）</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('users',this)">👥 用户</button>
+    <button class="tab" onclick="switchTab('tasks',this)">📋 任务</button>
+    <button class="tab" onclick="switchTab('gallery',this)">🎨 作品库</button>
+    <button class="tab" onclick="switchTab('providers',this)">☁️ 服务商</button>
+    <button class="tab" onclick="switchTab('models',this)">🤖 模型</button>
+    <button class="tab" onclick="switchTab('analytics',this)">📊 统计</button>
+  </div>
+
+  <!-- Users -->
+  <div class="panel" id="panel-users">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>邮箱</th><th>昵称</th><th>余额</th><th>任务数</th><th>注册时间</th></tr>
+      </thead>
+      <tbody id="tbody-users"></tbody>
+    </table>
+  </div>
+
+  <!-- Tasks -->
+  <div class="panel" id="panel-tasks" style="display:none">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>用户</th><th>类型</th><th>方案</th><th>描述</th><th>状态</th><th>费用</th><th>时间</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody-tasks"></tbody>
+    </table>
+  </div>
+
+  <!-- Gallery -->
+  <div class="panel" id="panel-gallery" style="display:none">
+    <table>
+      <thead>
+        <tr><th>预览</th><th>用户</th><th>类型</th><th>描述</th><th>费用</th><th>时间</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody-gallery"></tbody>
+    </table>
+  </div>
+
+  <!-- Providers -->
+  <div class="panel" id="panel-providers" style="display:none">
+    <div class="panel-head">
+      <h3>服务商列表</h3>
+      <button class="btn-add" onclick="openProviderModal()">+ 添加服务商</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>名称</th><th>Base URL</th><th>API Key</th><th>状态</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody-providers"></tbody>
+    </table>
+  </div>
+
+  <!-- Models -->
+  <div class="panel" id="panel-models" style="display:none">
+    <div class="panel-head">
+      <h3>模型列表</h3>
+      <button class="btn-add" onclick="openModelModal()">+ 添加模型</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>服务商</th><th>类型</th><th>Tab</th><th>标签</th><th>成本价</th><th>销售价</th><th>状态</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody-models"></tbody>
+    </table>
+  </div>
+
+  <!-- Analytics -->
+  <div class="panel" id="panel-analytics" style="display:none">
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+      <div id="chart-model-pie" style="flex:1;min-width:300px;height:380px;background:var(--bg3);border-radius:var(--radius-sm)"></div>
+      <div id="chart-model-bar" style="flex:1;min-width:300px;height:380px;background:var(--bg3);border-radius:var(--radius-sm)"></div>
+    </div>
+    <div id="chart-month-bar" style="width:100%;height:340px;background:var(--bg3);border-radius:var(--radius-sm)"></div>
+  </div>
+
+</div>
+
+<!-- Provider Modal -->
+<div id="modal-provider" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="provider-modal-title">添加服务商</h3>
+      <button class="modal-close" onclick="closeProviderModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="provider-edit-id">
+      <div class="form-row">
+        <label class="form-label">服务商 ID（英文，唯一）</label>
+        <input class="form-input" id="provider-id" placeholder="如 bailian、openai">
+      </div>
+      <div class="form-row">
+        <label class="form-label">显示名称</label>
+        <input class="form-input" id="provider-name" placeholder="如 阿里云百炼">
+      </div>
+      <div class="form-row">
+        <label class="form-label">Base URL</label>
+        <input class="form-input" id="provider-url" placeholder="如 https://dashscope.aliyuncs.com/api/v1">
+      </div>
+      <div class="form-row">
+        <label class="form-label">API Key</label>
+        <input class="form-input" id="provider-key" placeholder="留空则不修改">
+        <div class="form-hint">留空则保持现有 Key 不变</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="error" id="provider-error"></div>
+      <button class="btn-cancel" onclick="closeProviderModal()">取消</button>
+      <button class="btn-submit" onclick="saveProvider()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Model Modal -->
+<div id="modal-model" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="model-modal-title">添加模型</h3>
+      <button class="modal-close" onclick="closeModelModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="model-edit-id">
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">模型 ID（API 名）</label>
+          <input class="form-input" id="model-id" placeholder="如 wan2.7-image">
+        </div>
+        <div class="form-row">
+          <label class="form-label">所属服务商</label>
+          <select class="form-input" id="model-provider"></select>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">类型</label>
+          <select class="form-input" id="model-type">
+            <option value="image">图片生成</option>
+            <option value="video">视频生成</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label class="form-label">前台 Tab</label>
+          <select class="form-input" id="model-subtype">
+            <option value="t2i">文生图</option>
+            <option value="t2v">文生视频</option>
+            <option value="i2v">图生视频</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">显示标签</label>
+        <input class="form-input" id="model-label" placeholder="如 标准画图（1K/2K）">
+      </div>
+      <div class="form-row">
+        <label class="form-label">描述文字</label>
+        <input class="form-input" id="model-desc" placeholder="如 wan2.7 · 1K/2K">
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">成本价（元）</label>
+          <input class="form-input" id="model-cost" placeholder="0.20" type="number" step="0.01">
+        </div>
+        <div class="form-row">
+          <label class="form-label">销售价（元）</label>
+          <input class="form-input" id="model-price" placeholder="0.50" type="number" step="0.01">
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label class="form-label">计费方式</label>
+          <select class="form-input" id="model-persec">
+            <option value="false">固定（按张/次）</option>
+            <option value="true">按秒计费（视频）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" style="display:none" id="model-params-row">
+        <label class="form-label">额外参数（JSON，可选）</label>
+        <input class="form-input" id="model-params" placeholder='{"resolution":"1080P"}'>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="error" id="model-error"></div>
+      <button class="btn-cancel" onclick="closeModelModal()">取消</button>
+      <button class="btn-submit" onclick="saveModel()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let adminPwd = localStorage.getItem('admin_pwd') || '';
+let currentTab = 'users';
+let allData = { users: [], tasks: [], gallery: [], providers: [], models: [] };
+
+function $(id){ return document.getElementById(id); }
+
+async function api(url, method='GET', body=null) {
+  const opts={method,headers:{'X-Admin-Password':adminPwd}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+  const res=await fetch(url,opts);
+  const d=await res.json();
+  if(!res.ok) throw new Error(d.error||'请求失败');
+  return d;
+}
+
+// ─── Login ──────────────────────────────────────────────────────────────────
+function doLogin(){
+  adminPwd=$('admin-pwd').value.trim();
+  if(!adminPwd){$('login-error').textContent='请输入密码';return;}
+  api('/api/admin/stats').then(()=>{
+    localStorage.setItem('admin_pwd',adminPwd);
+    $('login-overlay').style.display='none';
+    $('topbar').style.display='flex';
+    $('main').style.display='block';
+    loadAll();
+  }).catch(e=>{$('login-error').textContent=e.message;});
+}
+if(adminPwd){
+  api('/api/admin/stats').then(()=>{
+    $('login-overlay').style.display='none';
+    $('topbar').style.display='flex';
+    $('main').style.display='block';
+    loadAll();
+  }).catch(()=>{localStorage.removeItem('admin_pwd');adminPwd='';});
+}
+
+// ─── Load All ───────────────────────────────────────────────────────────────
+async function loadAll(){
+  try{
+    const [stats,config] = await Promise.all([
+      api('/api/admin/stats'),
+      api('/api/admin/config')
+    ]);
+    $('s-users').textContent=stats.totalUsers;
+    $('s-tasks').textContent=stats.totalTasks;
+    $('s-gallery').textContent=stats.totalGallery;
+    $('s-revenue').textContent='¥'+stats.totalRevenue.toFixed(2);
+    $('s-today-tasks').textContent=stats.todayTasks;
+    $('s-today-revenue').textContent='¥'+stats.todayRevenue.toFixed(2);
+    allData.providers=config.providers;
+    allData.models=config.models;
+    renderProviders(config.providers);
+    renderModels(config.models);
+  }catch(e){alert('加载失败: '+e.message);}
+}
+
+// ─── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(tab, btn){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  ['users','tasks','gallery','providers','models','analytics'].forEach(t=>{
+    const el=$(`panel-${t}`);
+    if(el) el.style.display=t===tab?'block':'none';
+  });
+  if(tab==='analytics') loadAnalytics();
+}
+
+// ─── Render ─────────────────────────────────────────────────────────────────
+function renderUsers(users){
+  const el=$('tbody-users');
+  if(!users.length){el.innerHTML='<tr><td colspan="6" class="empty-sm" colspan="6">暂无用户</td></tr>';return;}
+  el.innerHTML=users.map(u=>`<tr>
+    <td>${u.id.slice(-6)}</td>
+    <td>${u.email}</td>
+    <td>${u.nickname||'-'}</td>
+    <td>¥${u.balance.toFixed(2)}</td>
+    <td>${u.taskCount||0}</td>
+    <td style="color:var(--text3)">${new Date(u.createdAt).toLocaleString('zh-CN')}</td>
+  </tr>`).join('');
+}
+
+function renderTasks(tasks){
+  const el=$('tbody-tasks');
+  if(!tasks.length){el.innerHTML='<tr><td colspan="9" class="empty-sm">暂无任务</td></tr>';return;}
+  const typeMap={'text-to-image':'文生图','text-to-video':'文生视频','image-to-video':'图生视频'};
+  const statusClass={succeeded:'success',failed:'fail',pending:'pending',running:'running'};
+  const statusText={succeeded:'成功',failed:'失败',pending:'排队',running:'生成中'};
+  el.innerHTML=tasks.map(t=>`<tr>
+    <td>${t.id.slice(-6)}</td>
+    <td>${t.userEmail||'-'}</td>
+    <td><span class="tag ${t.type==='text-to-image'?'image':'video'}">${typeMap[t.type]||t.type}</span></td>
+    <td>${t.planLabel||'-'}</td>
+    <td class="prompt-cell" title="${t.prompt||''}">${t.prompt||'-'}</td>
+    <td><span class="tag ${statusClass[t.status]||''}">${statusText[t.status]||t.status}</span></td>
+    <td style="color:var(--amber)">¥${(t.costYuan||0).toFixed(2)}</td>
+    <td style="color:var(--text3);white-space:nowrap">${new Date(t.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+    <td><button class="btn-sm btn-del" onclick="delTask('${t.id}')">删除</button></td>
+  </tr>`).join('');
+}
+
+function renderGallery(items){
+  const el=$('tbody-gallery');
+  if(!items.length){el.innerHTML='<tr><td colspan="7" class="empty-sm">暂无作品</td></tr>';return;}
+  const typeMap={'text-to-image':'文生图','text-to-video':'文生视频','image-to-video':'图生视频'};
+  el.innerHTML=items.map(g=>`<tr>
+    <td>${g.result&&g.result[0]?(g.type==='text-to-image'?`<img src="${g.result[0]}" class="thumb" alt="">`:`<video src="${g.result[0]}" class="thumb" muted></video>`):'<div class="thumb" style="display:flex;align-items:center;justify-content:center">🎨</div>'}</td>
+    <td>${g.userEmail||'-'}</td>
+    <td><span class="tag ${g.type==='text-to-image'?'image':'video'}">${typeMap[g.type]||g.type}</span></td>
+    <td class="prompt-cell">${g.prompt||'-'}</td>
+    <td style="color:var(--amber)">¥${(g.costYuan||0).toFixed(2)}</td>
+    <td style="color:var(--text3);white-space:nowrap">${new Date(g.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+    <td><button class="btn-sm btn-del" onclick="delGallery('${g.id}')">删除</button></td>
+  </tr>`).join('');
+}
+
+// ─── Provider Render ─────────────────────────────────────────────────────────
+function renderProviders(providers){
+  const el=$('tbody-providers');
+  if(!providers.length){el.innerHTML='<tr><td colspan="6" class="empty-sm">暂无服务商</td></tr>';return;}
+  el.innerHTML=providers.map(p=>`<tr>
+    <td><code style="font-size:12px;background:var(--bg3);padding:2px 6px;border-radius:4px">${p.id}</code></td>
+    <td>${p.name}</td>
+    <td style="color:var(--text3);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${p.baseUrl}">${p.baseUrl}</td>
+    <td><code style="font-size:12px;color:var(--amber)">${p.apiKey||'(未设置)'}</code></td>
+    <td><span class="tag ${p.enabled?'enabled':'disabled'}">${p.enabled?'已启用':'已禁用'}</span></td>
+    <td>
+      <button class="btn-sm btn-edit" onclick="editProvider('${p.id}')">编辑</button>
+      <button class="btn-sm ${p.enabled?'btn-off':'btn-on'}" onclick="toggleProvider('${p.id}',${!p.enabled})">${p.enabled?'禁用':'启用'}</button>
+      <button class="btn-sm btn-del" onclick="delProvider('${p.id}')">删除</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ─── Model Render ───────────────────────────────────────────────────────────
+function renderModels(models){
+  const el=$('tbody-models');
+  if(!models.length){el.innerHTML='<tr><td colspan="9" class="empty-sm">暂无模型</td></tr>';return;}
+  const typeMap={image:'图片',video:'视频'};
+  const subtypeMap={t2i:'文生图',t2v:'文生视频',i2v:'图生视频'};
+  el.innerHTML=models.map(m=>`<tr>
+    <td><code style="font-size:12px;background:var(--bg3);padding:2px 6px;border-radius:4px">${m.id}</code></td>
+    <td style="font-size:12px">${m.providerId}</td>
+    <td><span class="tag ${m.type==='image'?'image':'video'}">${typeMap[m.type]||m.type}</span></td>
+    <td style="font-size:12px">${subtypeMap[m.subtype]||m.subtype}</td>
+    <td style="font-size:12px">${m.label||'-'}</td>
+    <td style="color:var(--text2)">¥${(m.cost||0).toFixed(2)}${m.perSec?'/秒':''}</td>
+    <td style="color:var(--amber)">¥${(m.price||0).toFixed(2)}${m.perSec?'/秒':''}</td>
+    <td><span class="tag ${m.enabled?'enabled':'disabled'}">${m.enabled?'上架':'下架'}</span></td>
+    <td>
+      <button class="btn-sm btn-edit" onclick="editModel('${m.id}')">编辑</button>
+      <button class="btn-sm ${m.enabled?'btn-off':'btn-on'}" onclick="toggleModel('${m.id}',${!m.enabled})">${m.enabled?'下架':'上架'}</button>
+      <button class="btn-sm btn-del" onclick="delModel('${m.id}')">删除</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ─── Actions ────────────────────────────────────────────────────────────────
+async function delTask(id){ if(!confirm('确定删除该任务？'))return; try{await api('/api/admin/task/'+id,'DELETE');loadAll();}catch(e){alert(e.message);} }
+async function delGallery(id){ if(!confirm('确定删除该作品？'))return; try{await api('/api/admin/gallery/'+id,'DELETE');loadAll();}catch(e){alert(e.message);} }
+
+// ─── Provider CRUD ──────────────────────────────────────────────────────────
+function openProviderModal(p){
+  $('provider-error').textContent='';
+  if(p){
+    $('provider-modal-title').textContent='编辑服务商';
+    $('provider-edit-id').value=p.id;
+    $('provider-id').value=p.id; $('provider-id').readOnly=true;
+    $('provider-name').value=p.name;
+    $('provider-url').value=p.baseUrl;
+    $('provider-key').value='';
+  } else {
+    $('provider-modal-title').textContent='添加服务商';
+    $('provider-edit-id').value='';
+    $('provider-id').value=''; $('provider-id').readOnly=false;
+    $('provider-name').value='';
+    $('provider-url').value='';
+    $('provider-key').value='';
+  }
+  $('modal-provider').style.display='flex';
+}
+function closeProviderModal(){ $('modal-provider').style.display='none'; }
+function editProvider(id){ const p=allData.providers.find(x=>x.id===id); if(p) openProviderModal(p); }
+async function saveProvider(){
+  const editId=$('provider-edit-id').value;
+  const id=$('provider-id').value.trim();
+  const name=$('provider-name').value.trim();
+  const baseUrl=$('provider-url').value.trim();
+  const apiKey=$('provider-key').value.trim();
+  if(!id){$('provider-error').textContent='ID 不能为空';return;}
+  if(!name){$('provider-error').textContent='名称不能为空';return;}
+  try{
+    await api('/api/admin/providers','POST',{id,name,baseUrl,apiKey});
+    closeProviderModal();
+    loadAll();
+  }catch(e){$('provider-error').textContent=e.message;}
+}
+async function toggleProvider(id,enabled){
+  const p=allData.providers.find(x=>x.id===id);
+  if(!p)return;
+  try{
+    await api('/api/admin/providers','POST',{id,name:p.name,baseUrl:p.baseUrl,enabled});
+    loadAll();
+  }catch(e){alert(e.message);}
+}
+async function delProvider(id){
+  if(!confirm(`确定删除服务商 "${id}"？相关模型的 providerId 会失效！`))return;
+  try{await api('/api/admin/providers/'+id,'DELETE');loadAll();}catch(e){alert(e.message);}
+}
+
+// ─── Model CRUD ─────────────────────────────────────────────────────────────
+function openModelModal(m){
+  $('model-error').textContent='';
+  // 填充服务商下拉
+  $('model-provider').innerHTML=allData.providers.map(p=>`<option value="${p.id}">${p.name} (${p.id})</option>`).join('');
+  if(m){
+    $('model-modal-title').textContent='编辑模型';
+    $('model-edit-id').value=m.id;
+    $('model-id').value=m.id; $('model-id').readOnly=true;
+    $('model-provider').value=m.providerId||'bailian';
+    $('model-type').value=m.type;
+    $('model-subtype').value=m.subtype;
+    $('model-label').value=m.label||'';
+    $('model-desc').value=m.description||'';
+    $('model-cost').value=m.cost||0;
+    $('model-price').value=m.price||0;
+    $('model-persec').value=String(!!m.perSec);
+    $('model-params').value=m.params?JSON.stringify(m.params):'';
+  } else {
+    $('model-modal-title').textContent='添加模型';
+    $('model-edit-id').value='';
+    $('model-id').value=''; $('model-id').readOnly=false;
+    $('model-label').value=''; $('model-desc').value='';
+    $('model-cost').value='0'; $('model-price').value='0';
+    $('model-persec').value='false'; $('model-params').value='';
+  }
+  $('modal-model').style.display='flex';
+}
+function closeModelModal(){ $('modal-model').style.display='none'; }
+function editModel(id){ const m=allData.models.find(x=>x.id===id); if(m) openModelModal(m); }
+async function saveModel(){
+  const id=$('model-id').value.trim();
+  const providerId=$('model-provider').value;
+  const type=$('model-type').value;
+  const subtype=$('model-subtype').value;
+  const label=$('model-label').value.trim();
+  const description=$('model-desc').value.trim();
+  const cost=parseFloat($('model-cost').value)||0;
+  const price=parseFloat($('model-price').value)||0;
+  const perSec=$('model-persec').value==='true';
+  let params={};
+  try{ if($('model-params').value.trim()) params=JSON.parse($('model-params').value); }catch(e){}
+  if(!id){$('model-error').textContent='模型 ID 不能为空';return;}
+  if(!label){$('model-error').textContent='显示标签不能为空';return;}
+  try{
+    await api('/api/admin/models','POST',{id,providerId,type,subtype,label,description,cost,price,perSec,enabled:true,params});
+    closeModelModal();
+    loadAll();
+  }catch(e){$('model-error').textContent=e.message;}
+}
+async function toggleModel(id,enabled){
+  const m=allData.models.find(x=>x.id===id);
+  if(!m)return;
+  try{
+    await api('/api/admin/models/'+id,'PUT',{enabled});
+    loadAll();
+  }catch(e){alert(e.message);}
+}
+async function delModel(id){
+  if(!confirm(`确定删除模型 "${id}"？`))return;
+  try{await api('/api/admin/models/'+id,'DELETE');loadAll();}catch(e){alert(e.message);}
+}
+
+// ─── 统计大屏 ──────────────────────────────────────────────────────────────
+let chartPie=null, chartModelBar=null, chartMonthBar=null;
+
+const ECHARTS_THEME = {
+  backgroundColor:'transparent',
+  textStyle:{color:'#9ba3b8'},
+  title:{textStyle:{color:'#e8eaf0',fontSize:14,fontWeight:'600'}},
+  legend:{textStyle:{color:'#9ba3b8'}},
+  tooltip:{backgroundColor:'#1e2537',borderColor:'rgba(255,255,255,.1)',textStyle:{color:'#e8eaf0'}},
+};
+
+const PIE_COLORS = ['#8b6cf5','#00d4aa','#f5a623','#f04040','#22c97d','#38bdf8','#fb7185','#a3e635','#c084fc','#fdba74'];
+
+async function loadAnalytics(){
+  try{
+    const data = await api('/api/admin/analytics','GET');
+    renderModelPie(data.modelStats);
+    renderModelBar(data.modelStats);
+    renderMonthBar(data.monthStats);
+  }catch(e){ console.error('统计加载失败',e); }
+}
+
+function renderModelPie(modelStats){
+  if(!chartPie){ chartPie = echarts.init($('chart-model-pie')); }
+  chartPie.setOption({
+    ...ECHARTS_THEME,
+    title:{ text:'模型使用占比', left:'center', top:16 },
+    tooltip:{ ...ECHARTS_THEME.tooltip, trigger:'item', formatter:params=>`${params.name}<br/>使用次数：${params.value} 次<br/>占比：${params.percent}%` },
+    legend:{ orient:'vertical', right:12, top:'middle', textStyle:{color:'#9ba3b8'} },
+    series:[{
+      name:'模型使用', type:'pie',
+      radius:['40%','68%'], center:['38%','54%'],
+      label:{ show:false },
+      emphasis:{ label:{show:true,fontSize:14,fontWeight:'bold',color:'#e8eaf0'} },
+      data: modelStats.map((m,i)=>({
+        value:m.count, name:m.name,
+        itemStyle:{color:PIE_COLORS[i%PIE_COLORS.length]}
+      }))
+    }]
+  });
+}
+
+function renderModelBar(modelStats){
+  if(!chartModelBar){ chartModelBar = echarts.init($('chart-model-bar')); }
+  const sorted = [...modelStats].sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+  chartModelBar.setOption({
+    ...ECHARTS_THEME,
+    title:{ text:'模型收入排行（元）', left:'center', top:16 },
+    tooltip:{ ...ECHARTS_THEME.tooltip, trigger:'axis', formatter:params=>`${params[0].name}<br/>收入：¥${params[0].value}` },
+    grid:{ left:80, right:24, top:56, bottom:40 },
+    xAxis:{ type:'value', axisLabel:{color:'#9ba3b8',formatter:v=>'¥'+v}, splitLine:{lineStyle:{color:'rgba(255,255,255,.05)'}} },
+    yAxis:{ type:'category', data:sorted.map(m=>m.name), axisLabel:{color:'#9ba3b8'}, axisTick:{show:false} },
+    series:[{
+      type:'bar', barMaxWidth:22,
+      data:sorted.map((m,i)=>({ value:m.revenue, itemStyle:{color:PIE_COLORS[i%PIE_COLORS.length],borderRadius:[0,4,4,0]} })),
+      label:{ show:true, position:'right', color:'#9ba3b8', formatter:p=>'¥'+p.value }
+    }]
+  });
+}
+
+function renderMonthBar(monthStats){
+  if(!chartMonthBar){ chartMonthBar = echarts.init($('chart-month-bar')); }
+  chartMonthBar.setOption({
+    ...ECHARTS_THEME,
+    title:{ text:'近 12 个月使用量与收入', left:'center', top:16 },
+    tooltip:{ ...ECHARTS_THEME.tooltip, trigger:'axis', axisPointer:{type:'shadow'} },
+    legend:{ data:['任务量','收入（元）'], top:16, right:16, textStyle:{color:'#9ba3b8'} },
+    grid:{ left:50, right:70, top:56, bottom:40 },
+    xAxis:{ type:'category', data:monthStats.map(m=>m.month.slice(5)+'月'), axisLabel:{color:'#9ba3b8'}, axisTick:{show:false} },
+    yAxis:[
+      { type:'value', name:'任务量', nameTextStyle:{color:'#9ba3b8'}, axisLabel:{color:'#9ba3b8'}, splitLine:{lineStyle:{color:'rgba(255,255,255,.05)'}} },
+      { type:'value', name:'收入（元）', nameTextStyle:{color:'#9ba3b8'}, axisLabel:{color:'#9ba3b8',formatter:v=>'¥'+v}, splitLine:{show:false} }
+    ],
+    series:[
+      { name:'任务量', type:'bar', barMaxWidth:28, yAxisIndex:0,
+        data:monthStats.map(m=>m.tasks),
+        itemStyle:{color:'#8b6cf5',borderRadius:[4,4,0,0]},
+        label:{ show:true, position:'top', color:'#9ba3b8', formatter:p=>p.value||'' }
+      },
+      { name:'收入（元）', type:'line', yAxisIndex:1, smooth:true,
+        data:monthStats.map(m=>m.revenue),
+        lineStyle:{color:'#00d4aa',width:2},
+        itemStyle:{color:'#00d4aa'},
+        areaStyle:{color:'rgba(0,212,170,0.08)'},
+        symbol:'circle', symbolSize:6
+      }
+    ]
+  });
+}
+
+window.addEventListener('resize',()=>{
+  chartPie && chartPie.resize();
+  chartModelBar && chartModelBar.resize();
+  chartMonthBar && chartMonthBar.resize();
+});
+</script>
+</body>
+</html>
