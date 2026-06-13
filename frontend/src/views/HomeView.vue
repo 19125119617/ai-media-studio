@@ -11,15 +11,15 @@
       <div class="hero-top">
         <div class="hero-badge">
           <span class="dot"></span>
-          统一 API · 按量计费 · 多模态
+          {{ config.badge }}
         </div>
         <h1 class="hero-title">
-          <span class="gradient">统一的大模型</span><br>API 接口网关
+          <span class="gradient">{{ config.titleLine1 }}</span><br>{{ config.titleLine2 }}
         </h1>
-        <p class="hero-sub">一个接口 · 接入所有主流 AI 大模型</p>
+        <p class="hero-sub">{{ config.subtitle }}</p>
         <div class="hero-api-url">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          http://101.200.84.23:3001
+          {{ config.apiUrl }}
         </div>
         <br>
         <router-link to="/create" class="hero-cta">
@@ -27,21 +27,9 @@
           立即体验
         </router-link>
         <div class="hero-stats">
-          <div class="hero-stat">
-            <div class="num">{{ models.models.length || '--' }}</div>
-            <div class="label">可用模型</div>
-          </div>
-          <div class="hero-stat">
-            <div class="num">{{ providerCount }}</div>
-            <div class="label">服务商</div>
-          </div>
-          <div class="hero-stat">
-            <div class="num">99.9%</div>
-            <div class="label">服务可用率</div>
-          </div>
-          <div class="hero-stat">
-            <div class="num">&lt;200ms</div>
-            <div class="label">平均延迟</div>
+          <div class="hero-stat" v-for="(stat, i) in config.stats" :key="i">
+            <div class="num">{{ stat.value }}</div>
+            <div class="label">{{ stat.label }}</div>
           </div>
         </div>
       </div>
@@ -133,18 +121,9 @@
       <div class="model-tags-section">
         <h3>热门模型</h3>
         <div class="model-tags">
-          <span class="model-tag"><span class="tag-dot" style="background:#10a37f"></span>GPT-4o</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#10a37f"></span>GPT-4.1</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#d4a574"></span>Claude 3.5</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#4285f4"></span>Gemini Pro</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#4f6ef7"></span>DeepSeek V3</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#8b5cf6"></span>Qwen-Max</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#0668E1"></span>Llama 3</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#2932e1"></span>ERNIE 4.0</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#8b5cf6"></span>Wan2.7</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#f59e0b"></span>HappyHorse</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#4338ca"></span>GLM-4</span>
-          <span class="model-tag"><span class="tag-dot" style="background:#1a1a2e;border:1px solid #c4b5fd"></span>Kimi</span>
+          <span class="model-tag" v-for="(m, i) in config.popularModels" :key="i">
+            <span class="tag-dot" :style="{ background: m.color }"></span>{{ m.name }}
+          </span>
         </div>
       </div>
 
@@ -158,17 +137,25 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
-import { useModelsStore } from '../stores/models.js'
+import { reactive, onMounted } from 'vue'
+import axios from 'axios'
 
-const models = useModelsStore()
-
-const providerCount = computed(() => {
-  const set = new Set(models.models.map(m => m.provider))
-  return set.size || '--'
+const config = reactive({
+  badge: '统一 API · 按量计费 · 多模态',
+  titleLine1: '统一的大模型',
+  titleLine2: 'API 接口网关',
+  subtitle: '一个接口 · 接入所有主流 AI 大模型',
+  apiUrl: 'http://101.200.84.23:3001',
+  stats: [],
+  popularModels: []
 })
 
-onMounted(() => {
-  models.loadModels()
+onMounted(async () => {
+  try {
+    const res = await axios.get('/api/homepage/config')
+    Object.assign(config, res.data)
+  } catch (e) {
+    console.error('首页配置加载失败:', e)
+  }
 })
 </script>

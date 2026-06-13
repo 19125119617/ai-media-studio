@@ -60,6 +60,82 @@ function getEnabledModels() {
 
 loadConfig();
 
+// ─── 首页配置 ────────────────────────────────────────────────────────────────
+const SETTINGS_PATH = path.join(__dirname, 'settings.json');
+let HOMEPAGE_CONFIG = {};
+
+function loadHomepageConfig() {
+  const defaults = {
+    badge: '统一 API · 按量计费 · 多模态',
+    titleLine1: '统一的大模型',
+    titleLine2: 'API 接口网关',
+    subtitle: '一个接口 · 接入所有主流 AI 大模型',
+    apiUrl: 'http://101.200.84.23:3001',
+    stats: [
+      { label: '可用模型', value: '{{models}}' },
+      { label: '服务商', value: '{{providers}}' },
+      { label: '服务可用率', value: '99.9%' },
+      { label: '平均延迟', value: '<200ms' }
+    ],
+    popularModels: [
+      { name: 'GPT-4o', color: '#10a37f' },
+      { name: 'GPT-4.1', color: '#10a37f' },
+      { name: 'Claude 3.5', color: '#d4a574' },
+      { name: 'Gemini Pro', color: '#4285f4' },
+      { name: 'DeepSeek V3', color: '#4f6ef7' },
+      { name: 'Qwen-Max', color: '#8b5cf6' },
+      { name: 'Llama 3', color: '#0668E1' },
+      { name: 'ERNIE 4.0', color: '#2932e1' },
+      { name: 'Wan2.7', color: '#8b5cf6' },
+      { name: 'HappyHorse', color: '#f59e0b' },
+      { name: 'GLM-4', color: '#4338ca' },
+      { name: 'Kimi', color: '#c4b5fd' }
+    ]
+  };
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) {
+      const data = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+      HOMEPAGE_CONFIG = data.homepage || {};
+    }
+  } catch (e) {
+    console.error('首页配置加载失败，使用默认:', e.message);
+  }
+  // 合并默认值
+  for (const key of Object.keys(defaults)) {
+    if (HOMEPAGE_CONFIG[key] === undefined) HOMEPAGE_CONFIG[key] = defaults[key];
+  }
+}
+
+function saveHomepageConfig() {
+  try {
+    let data = {};
+    if (fs.existsSync(SETTINGS_PATH)) {
+      data = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    }
+    data.homepage = HOMEPAGE_CONFIG;
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    console.error('首页配置保存失败:', e.message);
+    return false;
+  }
+}
+
+function resolveHomepageConfig() {
+  const config = JSON.parse(JSON.stringify(HOMEPAGE_CONFIG));
+  if (config.stats) {
+    config.stats = config.stats.map(s => {
+      let val = s.value;
+      if (val === '{{models}}') val = String(getEnabledModels().length);
+      if (val === '{{providers}}') val = String(appConfig.providers.length);
+      return { ...s, value: val };
+    });
+  }
+  return config;
+}
+
+loadHomepageConfig();
+
 // ─── Express 中间件 ─────────────────────────────────────────────────────────
 app.use(cors({
   origin: true,
@@ -692,6 +768,37 @@ app.delete('/api/admin/models/:id', adminAuth, (req, res) => {
   saveConfig();
   rebuildPricing();
   res.json({ ok: true });
+});
+
+// ─── 首页配置 API ────────────────────────────────────────────────────────────
+// 公开接口：获取首页配置（已解析）
+app.get('/api/homepage/config', (req, res) => {
+  res.json(resolveHomepageConfig());
+});
+
+// 管理接口：更新首页配置
+app.put('/api/admin/homepage/config', adminAuth, (req, res) => {
+  const updates = req.body;
+  if (updates.badge !== undefined) HOMEPAGE_CONFIG.badge = updates.badge;
+  if (updates.titleLine1 !== undefined) HOMEPAGE_CONFIG.titleLine1 = updates.titleLine1;
+  if (updates.titleLine2 !== undefined) HOMEPAGE_CONFIG.titleLine2 = updates.titleLine2;
+  if (updates.subtitle !== undefined) HOMEPAGE_CONFIG.subtitle = updates.subtitle;
+  if (updates.apiUrl !== undefined) HOMEPAGE_CONFIG.apiUrl = updates.apiUrl;
+  if (updates.stats !== undefined) HOMEPAGE_CONFIG.stats = updates.stats;
+  if (updates.popularModels !== undefined) HOMEPAGE_CONFIG.popularModels = updates.popularModels;
+  if (saveHomepageConfig()) {
+    res.json({ ok: true, config: resolveHomepageConfig() });
+  } else {
+    res.status(500).json({ error: '保存失败' });
+  }
+});
+
+// 管理接口：重置首页配置（带 X-Admin-Password 头）
+app.post('/api/admin/homepage/reset', adminAuth, (req, res) => {
+  HOMEPAGE_CONFIG = {};
+  loadHomepageConfig(); // 重新加载默认值
+  saveHomepageConfig();
+  res.json({ ok: true, config: resolveHomepageConfig() });
 });
 
 // ─── 健康检查 ────────────────────────────────────────────────────────────────

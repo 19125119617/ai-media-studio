@@ -129,6 +129,65 @@
           </table>
         </div>
 
+        <!-- Homepage Config Tab -->
+        <div v-if="activeTab === 'homepage'" class="admin-panel" style="padding:24px">
+          <div class="panel-head" style="padding:0 0 16px 0">
+            <h3>🏠 首页展示配置</h3>
+            <div>
+              <button class="btn-add" @click="saveHomepageConfig" style="margin-right:8px">💾 保存</button>
+              <button class="btn-cancel" @click="resetHomepageConfig">↺ 重置默认</button>
+            </div>
+          </div>
+          
+          <div class="form-row-3">
+            <div class="form-row">
+              <label class="form-label">徽章标签</label>
+              <input v-model="hpForm.badge" class="form-input" />
+              <div class="form-hint">首页顶部标签，如：统一 API · 按量计费 · 多模态</div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">主标题第一行</label>
+              <input v-model="hpForm.titleLine1" class="form-input" />
+              <div class="form-hint">渐变色的文字</div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">主标题第二行</label>
+              <input v-model="hpForm.titleLine2" class="form-input" />
+            </div>
+          </div>
+          
+          <div class="form-row-3">
+            <div class="form-row">
+              <label class="form-label">副标题</label>
+              <input v-model="hpForm.subtitle" class="form-input" />
+            </div>
+            <div class="form-row">
+              <label class="form-label">API 地址</label>
+              <input v-model="hpForm.apiUrl" class="form-input" />
+            </div>
+          </div>
+
+          <div class="panel-head" style="padding:16px 0;margin-top:16px"><h3>统计数据（最多6个）</h3></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div v-for="(s, i) in hpForm.stats" :key="i" class="stat-edit-row">
+              <input v-model="s.label" class="form-input" placeholder="标签" style="flex:1" />
+              <input v-model="s.value" class="form-input" placeholder="值 ({{models}}/{{providers}}自动)" style="flex:1" />
+              <button class="btn-sm btn-del" @click="removeStat(i)">✕</button>
+            </div>
+          </div>
+          <button class="btn-add" style="margin-top:8px" @click="addStat">+ 添加统计项</button>
+
+          <div class="panel-head" style="padding:16px 0;margin-top:16px"><h3>热门模型（展示在首页下方）</h3></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div v-for="(m, i) in hpForm.popularModels" :key="i" class="stat-edit-row">
+              <input v-model="m.name" class="form-input" placeholder="模型名" style="flex:1" />
+              <input v-model="m.color" class="form-input" placeholder="颜色代码" style="width:100px" />
+              <button class="btn-sm btn-del" @click="removeModel(i)">✕</button>
+            </div>
+          </div>
+          <button class="btn-add" style="margin-top:8px" @click="addModel">+ 添加模型</button>
+        </div>
+
         <!-- Analytics Tab -->
         <div v-if="activeTab === 'analytics'" class="admin-panel">
           <div class="panel-head"><h3>模型使用统计</h3></div>
@@ -294,6 +353,7 @@ const tabs = [
   { id: 'users', icon: '👥', label: '用户' },
   { id: 'tasks', icon: '📋', label: '任务' },
   { id: 'models', icon: '⚙️', label: '模型管理' },
+  { id: 'homepage', icon: '🏠', label: '首页配置' },
   { id: 'analytics', icon: '📈', label: '分析' },
 ]
 
@@ -427,6 +487,59 @@ async function deleteProvider(p) {
   } catch (e) { console.error('Delete provider failed:', e) }
 }
 
+// Homepage Config
+const hpForm = reactive({
+  badge: '', titleLine1: '', titleLine2: '', subtitle: '', apiUrl: '',
+  stats: [],
+  popularModels: []
+})
+
+async function loadHomepageConfig() {
+  try {
+    const res = await axios.get('/api/homepage/config')
+    Object.assign(hpForm, res.data)
+  } catch (e) { console.error('Homepage config load failed:', e) }
+}
+
+async function saveHomepageConfig() {
+  try {
+    const res = await axios.put('/api/admin/homepage/config', hpForm, { headers: adminHeaders() })
+    if (res.data.ok) {
+      Object.assign(hpForm, res.data.config)
+      alert('✅ 首页配置已保存！刷新前台页面即可看到效果。')
+    }
+  } catch (e) {
+    alert('❌ 保存失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
+async function resetHomepageConfig() {
+  if (!confirm('确定重置为默认配置？')) return
+  try {
+    const res = await axios.post('/api/admin/homepage/reset', {}, { headers: adminHeaders() })
+    Object.assign(hpForm, res.data.config)
+    alert('✅ 已重置为默认配置！')
+  } catch (e) {
+    alert('❌ 重置失败')
+  }
+}
+
+function addStat() {
+  hpForm.stats.push({ label: '新统计', value: '0' })
+}
+
+function removeStat(i) {
+  hpForm.stats.splice(i, 1)
+}
+
+function addModel() {
+  hpForm.popularModels.push({ name: '新模型', color: '#6366f1' })
+}
+
+function removeModel(i) {
+  hpForm.popularModels.splice(i, 1)
+}
+
 // Analytics
 const modelStats = ref([])
 const monthStats = ref([])
@@ -454,6 +567,7 @@ function loadAll() {
   loadUsers()
   loadTasks()
   loadConfig()
+  loadHomepageConfig()
   loadAnalytics()
 }
 
@@ -646,6 +760,15 @@ code { font-family: monospace; color: #f5a623; }
 select.form-input { cursor: pointer; }
 select.form-input option { background: #0f1219; color: #e8eaf0; }
 .error-msg { color: #f04040; font-size: 12px; margin-right: auto; align-self: center; }
+
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.stat-edit-row {
+  display: flex; align-items: center; gap: 8px;
+  background: #161b27; border: 1px solid rgba(255,255,255,.07);
+  border-radius: 10px; padding: 8px 12px;
+}
+.stat-edit-row .form-input { margin-bottom: 0; }
 
 @media (max-width: 1100px) {
   .stats-grid { grid-template-columns: repeat(3, 1fr); }
